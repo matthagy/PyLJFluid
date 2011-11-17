@@ -1,3 +1,4 @@
+'''
 PyLJFluid - Classical Fluids Simulations Using Python
 ==================================================================
 Perform the famous computer "expriments" on classical fluids by
@@ -8,3 +9,7 @@ LICENSE
 ------------------------------------------------------------------
 PyLJFluid is Licensed under the permissive Apache Licensed.
 See included LICENSE file.
+'''
+
+
+
