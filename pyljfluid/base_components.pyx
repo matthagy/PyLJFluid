@@ -7,7 +7,8 @@ cimport numpy as np
 cimport cython
 from libc.stdlib cimport malloc, realloc, free
 
-from util cimport c_periodic_direction, c_periodic_distance, c_vector_length
+from util cimport (c_periodic_direction, c_periodic_distance,
+                   c_vector_length, c_vector_sqr_length)
 
 
 cdef ensure_N3_array(arr):
@@ -202,6 +203,15 @@ cdef inline double evaluate_U612(double sigma, double epsilon, double r) nogil:
     cdef double x6 = x2*x2*x2
     return 4 * epsilon * (x6*x6 - x6)
 
+@cython.cdivision(True)
+cdef inline double evaluate_LJ_force(double sigma, double epsilon, double r) nogil:
+    cdef double inv_r = 1.0 / r
+    cdef double x = sigma * inv_r
+    cdef double x2 = x*x
+    cdef double x6 = x2*x2*x2
+    return -4 * 6 * epsilon * inv_r * (2*x6*x6 - x6)
+
+
 cdef class LJForceFeild(ForceField):
 
     def __cinit__(self, sigma=1.0, epsilon=1.0, r_cutoff=2.5):
@@ -210,17 +220,54 @@ cdef class LJForceFeild(ForceField):
         self.r_cutoff = r_cutoff
         self.U_shift = evaluate_U612(self.sigma, self.epsilon, self.r_cutoff)
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    cdef int _evaluate_forces(self,
+                              np.ndarray[double, ndim=2] forces,
+                              np.ndarray[double, ndim=2] positions,
+                              double box_size,
+                              NeighborsTable neighbors) except -1:
+        cdef unsigned int* neighbor_indices = neighbors.neighbor_indices
+        cdef size_t N_neighbors = neighbors.N_neighbors
+        cdef unsigned int neighbor_i, inx_i, inx_j, k
+        cdef double pos_i[3], pos_j[3], r_ij[3]
+        cdef double inv_r_sqr, x2, x6, scaled_f
+        cdef double r_cutoff_sqr = self.r_cutoff**2
+        cdef double sigma2 = self.sigma * self.sigma
+        cdef double epsilon = self.epsilon
+
+        forces.fill(0.0)
+
+        for neighbor_i in range(N_neighbors):
+            inx_i = neighbor_indices[2 * neighbor_i]
+            inx_j = neighbor_indices[2 * neighbor_i + 1]
+
+            for k in range(3): pos_i[k] = positions[inx_i, k]
+            for k in range(3): pos_j[k] = positions[inx_j, k]
+
+            c_periodic_direction(r_ij, pos_i, pos_j, box_size)
+            r_sqr = c_vector_sqr_length(r_ij)
+
+            if r_sqr > r_cutoff_sqr:
+                continue
+
+            inv_r_sqr = 1.0 / r_sqr
+            x2 = sigma2 * inv_r_sqr
+            x6 = x2*x2*x2
+            scaled_f = (-4 * 6) * epsilon * inv_r_sqr * (2*x6*x6 - x6)
+
+            for k in range(3): forces[inx_i, k] += r_ij[k] * scaled_f
+            for k in range(3): forces[inx_j, k] -= r_ij[k] * scaled_f
+
+
     @cython.cdivision(True)
     cdef int _evaluate_a_scalar_force(self, double *f_ptr, double r) except -1:
         if r >= self.r_cutoff:
             f_ptr[0] = 0.0
             return 0
 
-        cdef double inv_r = 1.0 / r
-        cdef double x = self.sigma * inv_r
-        cdef double x2 = x*x
-        cdef double x6 = x2*x2*x2
-        f_ptr[0] = -4 * 6 * self.epsilon * inv_r * (2*x6*x6 - x6)
+        f_ptr[0] = evaluate_LJ_force(self.sigma, self.epsilon, r)
 
     @cython.cdivision(True)
     cdef int _evaluate_a_potential(self, double *U_ptr, double r) except -1:
@@ -260,12 +307,18 @@ cdef class BasePyForceField(ForceField):
 cdef class BaseConfig:
 
     def __cinit__(self,
-                  np.ndarray[double, ndim=2] positions,
+                  np.ndarray[double, ndim=2] positions not None,
                   np.ndarray[double, ndim=2] last_positions,
-                  double box_size):
+                  double box_size,
+                  double dt):
+        ensure_N3_array(positions)
+        if last_positions is None:
+            last_positions = positions.copy()
+
         self.positions = positions
         self.last_positions = last_positions
         self.box_size = box_size
+        self.dt = dt
 
 
 
