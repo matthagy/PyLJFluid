@@ -8,7 +8,7 @@ except ImportError:
     def fmin_cg(*args, **kwds):
         raise RuntimeError('fmin_cg not available; install scipy to use this functionality')
 
-from base_components import (Parameters, NeighborsTable, ForceField, LJForceFeild,
+from base_components import (Parameters, NeighborsTable, ForceField, LJForceField,
                              BaseConfig, System, BasePairCorrelationFunctionCalculator)
 from util import periodic_distances
 
@@ -61,6 +61,9 @@ class Config(BaseConfig):
         positions = -self.last_positions + 2 * self.positions + (self.dt**2 / mass) * forces
         self.last_positions = self.positions
         self.positions = positions
+
+    def __reduce__(self):
+        return (Config, (self.positions, self.last_positions, self.box_size, self.dt))
 
 
 class NeighborsTableTracker(object):

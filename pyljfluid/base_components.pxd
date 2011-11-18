@@ -46,7 +46,7 @@ cdef class ForceField:
     cdef int _evaluate_a_potential(self, double *, double r) except -1
 
 
-cdef class LJForceFeild(ForceField):
+cdef class LJForceField(ForceField):
 
     cdef public double sigma
     cdef public double epsilon

@@ -24,7 +24,7 @@ try:
 except ImportError,e:
     have_cython = False
 
-os.chdir(os.path.dirname(__file__))
+os.chdir(os.path.dirname(__file__) or os.getcwd())
 
 def msg(s, *args):
     sys.stderr.write((s % args if args else s) + '\n')

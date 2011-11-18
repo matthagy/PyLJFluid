@@ -217,13 +217,16 @@ cdef inline double evaluate_LJ_force(double sigma, double epsilon, double r) nog
     return -4 * 6 * epsilon * inv_r * (2*x6*x6 - x6)
 
 
-cdef class LJForceFeild(ForceField):
+cdef class LJForceField(ForceField):
 
     def __cinit__(self, sigma=1.0, epsilon=1.0, r_cutoff=2.5):
         self.sigma = sigma
         self.epsilon = epsilon
         self.r_cutoff = r_cutoff
         self.U_shift = evaluate_U612(self.sigma, self.epsilon, self.r_cutoff)
+
+    def __reduce__(self):
+        return (LJForceField, (self.sigma, self.epsilon, self.r_cutoff))
 
 #     @cython.boundscheck(False)
 #     @cython.wraparound(False)
