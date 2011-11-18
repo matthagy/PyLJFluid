@@ -1,6 +1,7 @@
 
 cimport numpy as np
 
+
 cdef class Parameters:
 
     cdef public double mass
@@ -9,7 +10,8 @@ cdef class Parameters:
 
 cdef class NeighborsTable:
 
-    cdef public double r_neighbor
+    cdef public double r_forcefield_cutoff
+    cdef public double r_skin
     cdef int* neighbor_indices
     cdef int N_neighbors, N_allocated
 
@@ -47,9 +49,9 @@ cdef class LJForceFeild(ForceField):
 
 cdef class Config:
 
-    cdef public np.ndarray positions
-    cdef public np.ndarray last_positions
-
+    cdef public object positions
+    cdef public object last_positions
+    cdef public double box_size
 
 cdef class System:
 

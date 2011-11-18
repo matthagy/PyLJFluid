@@ -62,7 +62,7 @@ def cython_extension(name):
     cython_def_file = ensure_file(base_path + '.pxd')
     c_file = base_path + '.c'
 
-    if (os.path.exists(c_file) and
+    if (not os.path.exists(c_file) or
         os.path.getmtime(c_file) <
         max(os.path.getmtime(path) for path in [cython_file, cython_def_file]
             if os.path.exists(path))):
@@ -79,7 +79,7 @@ def cython_extension(name):
 
 
 extensions = [cython_extension('pyljfluid.util'),
-              cython_extension('pyljfluid.components')]
+              cython_extension('pyljfluid.base_components')]
 
 setup(
     name=name,
