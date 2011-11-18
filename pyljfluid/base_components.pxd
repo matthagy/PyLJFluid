@@ -24,24 +24,26 @@ cdef class NeighborsTable:
 
 cdef class ForceField:
 
-    cdef void _evaluate_forces(self,
+    cdef int _evaluate_forces(self,
                               np.ndarray[double, ndim=2] forces,
                               np.ndarray[double, ndim=2] positions,
-                              NeighborsTable neighbors)
+                              double box_size,
+                              NeighborsTable neighbors) except -1
 
-    cdef double _evaluate_potential(self,
-                                    np.ndarray[double, ndim=2] positions,
-                                    NeighborsTable neighbors)
+    cdef int _evaluate_potential(self,
+                                 double *,
+                                 np.ndarray[double, ndim=2] positions,
+                                 double box_size,
+                                 NeighborsTable neighbors) except -1
 
     # force on particle i (negative force on particle j)
-    cdef void _evalute_a_force(self,
-                                double force[3],
-                                double pos_i[3],
-                                double pos_j[3])
+    cdef int _evaluate_a_force(self,
+                               double force[3],
+                               double r_ij[3]) except -1
 
-    cdef double _evaluate_a_scalar_force(self, double pos_i, double pos_j)
+    cdef int _evaluate_a_scalar_force(self, double *, double r) except -1
 
-    cdef double _evaluate_a_scalar_potential(self, double pos_i, double pos_j)
+    cdef int _evaluate_a_potential(self, double *, double r) except -1
 
 
 cdef class LJForceFeild(ForceField):
@@ -49,13 +51,14 @@ cdef class LJForceFeild(ForceField):
     cdef public double sigma
     cdef public double epsilon
     cdef public double r_cutoff
+    cdef public double U_shift
 
 
 cdef class BasePyForceField(ForceField):
 
     pass
 
-cdef class Config:
+cdef class BaseConfig:
 
     cdef public object positions
     cdef public object last_positions
@@ -64,4 +67,4 @@ cdef class Config:
 cdef class System:
 
     cdef public Parameters parameters
-    cdef public Config current_config
+    cdef public BaseConfig current_config

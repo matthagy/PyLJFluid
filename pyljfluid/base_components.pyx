@@ -7,7 +7,7 @@ cimport numpy as np
 cimport cython
 from libc.stdlib cimport malloc, realloc, free
 
-from util cimport c_periodic_distance
+from util cimport c_periodic_direction, c_periodic_distance, c_vector_length
 
 
 cdef ensure_N3_array(arr):
@@ -16,7 +16,7 @@ cdef ensure_N3_array(arr):
                         % (type(arr).__name__,))
     if arr.dtype != np.double:
         raise ValueError("bad array type %s; must be double" % (arr.dtype,))
-    if not len(arr.shape) == 2 and arr.shape[1] == 3:
+    if not (len(arr.shape) == 2 and arr.shape[1] == 3):
         raise ValueError("bad array shape %s; must be (N,3)" % (arr.shape,))
     return arr
 
@@ -110,36 +110,97 @@ cdef class NeighborsTable:
 
 cdef class ForceField:
 
-    cdef void _evaluate_forces(self,
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    cdef int _evaluate_forces(self,
                               np.ndarray[double, ndim=2] forces,
                               np.ndarray[double, ndim=2] positions,
-                              NeighborsTable neighbors):
-        pass
+                              double box_size,
+                              NeighborsTable neighbors) except -1:
+        cdef unsigned int* neighbor_indices = neighbors.neighbor_indices
+        cdef size_t N_neighbors = neighbors.N_neighbors
+        cdef unsigned int neighbor_i, inx_i, inx_j, k
+        cdef double force[3], pos_i[3], pos_j[3], r_ij[3]
 
-    cdef double _evaluate_potential(self,
-                                    np.ndarray[double, ndim=2] positions,
-                                    NeighborsTable neighbors):
-        pass
+        forces.fill(0.0)
 
-    cdef void _evalute_a_force(self,
-                                double force[3],
-                                double pos_i[3],
-                                double pos_j[3]):
-        pass
+        for neighbor_i in range(N_neighbors):
+            inx_i = neighbor_indices[2 * neighbor_i]
+            inx_j = neighbor_indices[2 * neighbor_i + 1]
 
-    cdef double _evaluate_a_scalar_force(self, double pos_i, double pos_j):
+            for k in range(3): pos_i[k] = positions[inx_i, k]
+            for k in range(3): pos_j[k] = positions[inx_j, k]
+            c_periodic_direction(r_ij, pos_i, pos_j, box_size)
+
+            self._evaluate_a_force(force, r_ij)
+            for k in range(3): forces[inx_i, k] += force[k]
+            for k in range(3): forces[inx_j, k] -= force[k]
+
+    cdef int _evaluate_potential(self, double *U_p,
+                                 np.ndarray[double, ndim=2] positions,
+                                 double box_size,
+                                 NeighborsTable neighbors) except -1:
+
+        cdef unsigned int* neighbor_indices = neighbors.neighbor_indices
+        cdef size_t N_neighbors = neighbors.N_neighbors
+        cdef unsigned int neighbor_i, inx_i, inx_j, k
+        cdef double pos_i[3], pos_j[3], r, U, acc_U
+
+        acc_U = 0.0
+        for neighbor_i in range(N_neighbors):
+            inx_i = neighbor_indices[2 * neighbor_i]
+            inx_j = neighbor_indices[2 * neighbor_i + 1]
+
+            for k in range(3): pos_i[k] = positions[inx_i, k]
+            for k in range(3): pos_j[k] = positions[inx_j, k]
+            r = c_periodic_distance(pos_i, pos_j, box_size)
+            self._evaluate_a_potential(&U, r)
+            acc_U += U
+
+        U_p[0] = acc_U
+
+
+    @cython.cdivision(True)
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef int _evaluate_a_force(self,
+                               double force[3],
+                               double r_ij[3]) except -1:
+        cdef double f, r, scale
+        cdef int k
+        r = c_vector_length(r_ij)
+        self._evaluate_a_scalar_force(&f, r)
+        scale = f / r
+        for k in range(3): force[k] = r_ij[k] * scale
+
+    cdef int _evaluate_a_scalar_force(self, double *f_ptr, double r) except -1:
         raise RuntimeError("_evaluate_a_scalar_force not overrided in base class")
 
-    cdef double _evaluate_a_scalar_potential(self, double pos_i, double pos_j):
-        raise RuntimeError("_evaluate_a_scalar_potential not overrided in base class")
+    cdef int _evaluate_a_potential(self, double *U_ptr, double r) except -1:
+        raise RuntimeError("_evaluate_a_potential not overrided in base class")
 
-    def evaluate_forces(self, forces, positions, NeighborsTable neighbors):
+    def evaluate_forces(self, forces, positions, double box_size, NeighborsTable neighbors):
         ensure_N3_array(forces)
         ensure_N3_array(positions)
-        self._evaluate_forces(forces, positions, neighbors)
+        self._evaluate_forces(forces, positions, box_size, neighbors)
+        return forces
+
+    def evaluate_potential(self, positions, double box_size, NeighborsTable neighbors):
+        ensure_N3_array(positions)
+        cdef double U
+        self._evaluate_potential(&U, positions, box_size, neighbors)
+        return U
 
 
 
+
+@cython.cdivision(True)
+cdef inline double evaluate_U612(double sigma, double epsilon, double r) nogil:
+    cdef double x = sigma / r
+    cdef double x2 = x*x
+    cdef double x6 = x2*x2*x2
+    return 4 * epsilon * (x6*x6 - x6)
 
 cdef class LJForceFeild(ForceField):
 
@@ -147,6 +208,27 @@ cdef class LJForceFeild(ForceField):
         self.sigma = sigma
         self.epsilon = epsilon
         self.r_cutoff = r_cutoff
+        self.U_shift = evaluate_U612(self.sigma, self.epsilon, self.r_cutoff)
+
+    @cython.cdivision(True)
+    cdef int _evaluate_a_scalar_force(self, double *f_ptr, double r) except -1:
+        if r >= self.r_cutoff:
+            f_ptr[0] = 0.0
+            return 0
+
+        cdef double inv_r = 1.0 / r
+        cdef double x = self.sigma * inv_r
+        cdef double x2 = x*x
+        cdef double x6 = x2*x2*x2
+        f_ptr[0] = -4 * 6 * self.epsilon * inv_r * (2*x6*x6 - x6)
+
+    @cython.cdivision(True)
+    cdef int _evaluate_a_potential(self, double *U_ptr, double r) except -1:
+        if r >= self.r_cutoff:
+            U_ptr[0] = 0.0
+            return 0
+
+        U_ptr[0] = evaluate_U612(self.sigma, self.epsilon, r) - self.U_shift
 
 
 cdef class BasePyForceField(ForceField):
@@ -171,6 +253,8 @@ cdef class BasePyForceField(ForceField):
 #             super(BasePyForceField, self)._evaluate_potential(positions, neighbors)
 #         else:
 #             ev(positions, neighbors)
+
+
 
 
 cdef class BaseConfig:
