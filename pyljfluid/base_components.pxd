@@ -25,8 +25,8 @@ cdef class NeighborsTable:
 cdef class ForceField:
 
     cdef int _evaluate_forces(self,
-                              np.ndarray[double, ndim=2] forces,
-                              np.ndarray[double, ndim=2] positions,
+                              np.ndarray[double, ndim=2, mode='c'] forces,
+                              np.ndarray[double, ndim=2, mode='c'] positions,
                               double box_size,
                               NeighborsTable neighbors) except -1
 
@@ -63,6 +63,7 @@ cdef class BaseConfig:
     cdef public object positions
     cdef public object last_positions
     cdef public double box_size
+    cdef public double dt
 
 cdef class System:
 

@@ -14,6 +14,7 @@ __pycache__
 *.dylib
 *.o
 pyljfluid/*.c
+!pyljfluid/lj_forces.c
 
 # Build results
 build/

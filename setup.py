@@ -5,6 +5,8 @@ import sys
 import os
 
 from distutils.core import setup, Extension
+from distutils.sysconfig import customize_compiler
+from distutils.ccompiler import new_compiler
 
 try:
     import numpy as np
@@ -56,7 +58,7 @@ def run_cython(cython_file, c_file):
         if result.num_errors > 0:
             error_exit()
 
-def cython_extension(name):
+def cython_extension(name, extra_c_files=[]):
     base_path = name.replace('.','/')
     cython_file = ensure_file(base_path + '.pyx')
     cython_def_file = ensure_file(base_path + '.pxd')
@@ -75,11 +77,27 @@ def cython_extension(name):
 
     return Extension(name=name,
                      sources=[c_file],
+                     extra_objects=map(prepare_extra_c_file, extra_c_files),
                      include_dirs=get_numpy_include_dirs())
 
+def prepare_extra_c_file(info):
+    c_file = info['filename']
+    compile_args = info.get('compile_args', [])
+    cc = new_compiler(verbose=3)
+    customize_compiler(cc)
+    [o_file] = cc.compile([c_file], '.',
+                         extra_postargs=compile_args)
+    return o_file
 
-extensions = [cython_extension('pyljfluid.util'),
-              cython_extension('pyljfluid.base_components')]
+extensions = [
+    cython_extension('pyljfluid.util'),
+
+    cython_extension('pyljfluid.base_components',
+                     extra_c_files=[
+                     dict(filename='pyljfluid/lj_forces.c',
+                          compile_args=['-std=c99', '-O3'])
+                     ])
+    ]
 
 setup(
     name=name,

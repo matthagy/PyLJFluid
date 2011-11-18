@@ -11,6 +11,10 @@ from util cimport (c_periodic_direction, c_periodic_distance,
                    c_vector_length, c_vector_sqr_length)
 
 
+cdef extern from "lj_forces.h":
+    void PyLJFluid_evaluate_LJ_forces(double *, size_t, unsigned int *, double *, double,
+                                      double, double, double)
+
 cdef ensure_N3_array(arr):
     if not isinstance(arr, np.ndarray):
         raise TypeError("bad argument of type %s; must be an ndarray"
@@ -115,8 +119,8 @@ cdef class ForceField:
     @cython.wraparound(False)
     @cython.nonecheck(False)
     cdef int _evaluate_forces(self,
-                              np.ndarray[double, ndim=2] forces,
-                              np.ndarray[double, ndim=2] positions,
+                              np.ndarray[double, ndim=2, mode='c'] forces,
+                              np.ndarray[double, ndim=2, mode='c'] positions,
                               double box_size,
                               NeighborsTable neighbors) except -1:
         cdef unsigned int* neighbor_indices = neighbors.neighbor_indices
@@ -220,46 +224,59 @@ cdef class LJForceFeild(ForceField):
         self.r_cutoff = r_cutoff
         self.U_shift = evaluate_U612(self.sigma, self.epsilon, self.r_cutoff)
 
-    @cython.boundscheck(False)
-    @cython.wraparound(False)
-    @cython.nonecheck(False)
+#     @cython.boundscheck(False)
+#     @cython.wraparound(False)
+#     @cython.nonecheck(False)
+#     cdef int _evaluate_forces(self,
+#                               np.ndarray[double, ndim=2] forces,
+#                               np.ndarray[double, ndim=2] positions,
+#                               double box_size,
+#                               NeighborsTable neighbors) except -1:
+#         cdef unsigned int* neighbor_indices = neighbors.neighbor_indices
+#         cdef size_t N_neighbors = neighbors.N_neighbors
+#         cdef unsigned int neighbor_i, inx_i, inx_j, k
+#         cdef double pos_i[3], pos_j[3], r_ij[3]
+#         cdef double inv_r_sqr, x2, x6, scaled_f
+#         cdef double r_cutoff_sqr = self.r_cutoff**2
+#         cdef double sigma2 = self.sigma * self.sigma
+#         cdef double epsilon = self.epsilon
+
+#         forces.fill(0.0)
+
+#         for neighbor_i in range(N_neighbors):
+#             inx_i = neighbor_indices[2 * neighbor_i]
+#             inx_j = neighbor_indices[2 * neighbor_i + 1]
+
+#             for k in range(3): pos_i[k] = positions[inx_i, k]
+#             for k in range(3): pos_j[k] = positions[inx_j, k]
+
+#             c_periodic_direction(r_ij, pos_i, pos_j, box_size)
+#             r_sqr = c_vector_sqr_length(r_ij)
+
+#             if r_sqr > r_cutoff_sqr:
+#                 continue
+
+#             inv_r_sqr = 1.0 / r_sqr
+#             x2 = sigma2 * inv_r_sqr
+#             x6 = x2*x2*x2
+#             scaled_f = (-4 * 6) * epsilon * inv_r_sqr * (2*x6*x6 - x6)
+
+#             for k in range(3): forces[inx_i, k] += r_ij[k] * scaled_f
+#             for k in range(3): forces[inx_j, k] -= r_ij[k] * scaled_f
+
     cdef int _evaluate_forces(self,
-                              np.ndarray[double, ndim=2] forces,
-                              np.ndarray[double, ndim=2] positions,
+                              np.ndarray[double, ndim=2, mode='c'] forces,
+                              np.ndarray[double, ndim=2, mode='c'] positions,
                               double box_size,
                               NeighborsTable neighbors) except -1:
-        cdef unsigned int* neighbor_indices = neighbors.neighbor_indices
-        cdef size_t N_neighbors = neighbors.N_neighbors
-        cdef unsigned int neighbor_i, inx_i, inx_j, k
-        cdef double pos_i[3], pos_j[3], r_ij[3]
-        cdef double inv_r_sqr, x2, x6, scaled_f
-        cdef double r_cutoff_sqr = self.r_cutoff**2
-        cdef double sigma2 = self.sigma * self.sigma
-        cdef double epsilon = self.epsilon
 
         forces.fill(0.0)
-
-        for neighbor_i in range(N_neighbors):
-            inx_i = neighbor_indices[2 * neighbor_i]
-            inx_j = neighbor_indices[2 * neighbor_i + 1]
-
-            for k in range(3): pos_i[k] = positions[inx_i, k]
-            for k in range(3): pos_j[k] = positions[inx_j, k]
-
-            c_periodic_direction(r_ij, pos_i, pos_j, box_size)
-            r_sqr = c_vector_sqr_length(r_ij)
-
-            if r_sqr > r_cutoff_sqr:
-                continue
-
-            inv_r_sqr = 1.0 / r_sqr
-            x2 = sigma2 * inv_r_sqr
-            x6 = x2*x2*x2
-            scaled_f = (-4 * 6) * epsilon * inv_r_sqr * (2*x6*x6 - x6)
-
-            for k in range(3): forces[inx_i, k] += r_ij[k] * scaled_f
-            for k in range(3): forces[inx_j, k] -= r_ij[k] * scaled_f
-
+        PyLJFluid_evaluate_LJ_forces(<double *>np.PyArray_DATA(forces),
+                                     neighbors.N_neighbors,
+                                     neighbors.neighbor_indices,
+                                     <double *>np.PyArray_DATA(positions),
+                                     box_size,
+                                     self.sigma, self.epsilon, self.r_cutoff)
 
     @cython.cdivision(True)
     cdef int _evaluate_a_scalar_force(self, double *f_ptr, double r) except -1:
