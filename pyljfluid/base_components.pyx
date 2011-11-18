@@ -183,25 +183,10 @@ cdef class BaseConfig:
         self.last_positions = last_positions
         self.box_size = box_size
 
-    @classmethod
-    def create(cls, N, rho, sigma=1.0, T=1.0, mass=1.0):
-        V = N * sigma**3 / rho
-        box_size = V**(1/3)
-        positions = np.random.uniform(0.0, box_size, (N, 3))
-        velocities = np.random.normal(scale=np.sqrt(T / mass))
-        return cls(positions, positions - velocities, box_size)
-
-    def calculate_velocities(self):
-        return self.positions - self.last_positions
-
-    def calculate_rms_velocity(self):
-        v = self.calculate_temperature()
-        (v**2).mean()**0.5
-
-    def calculate_temperature(self):
-        v_rms = self.calculate_rms_velocity()
 
 
 cdef class System:
 
     pass
+
+
