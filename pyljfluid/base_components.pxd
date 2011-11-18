@@ -24,7 +24,7 @@ cdef class NeighborsTable:
 
 cdef class ForceField:
 
-    cdef void _evaluate_force(self,
+    cdef void _evaluate_forces(self,
                               np.ndarray[double, ndim=2] forces,
                               np.ndarray[double, ndim=2] positions,
                               NeighborsTable neighbors)
@@ -34,7 +34,7 @@ cdef class ForceField:
                                     NeighborsTable neighbors)
 
     # force on particle i (negative force on particle j)
-    cdef void _evalaute_a_force(self,
+    cdef void _evalute_a_force(self,
                                 double force[3],
                                 double pos_i[3],
                                 double pos_j[3])
@@ -50,6 +50,10 @@ cdef class LJForceFeild(ForceField):
     cdef public double epsilon
     cdef public double r_cutoff
 
+
+cdef class BasePyForceField(ForceField):
+
+    pass
 
 cdef class Config:
 

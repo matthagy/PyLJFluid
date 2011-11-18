@@ -103,7 +103,7 @@ cdef class NeighborsTable:
 
 cdef class ForceField:
 
-    cdef void _evaluate_force(self,
+    cdef void _evaluate_forces(self,
                               np.ndarray[double, ndim=2] forces,
                               np.ndarray[double, ndim=2] positions,
                               NeighborsTable neighbors):
@@ -114,17 +114,17 @@ cdef class ForceField:
                                     NeighborsTable neighbors):
         pass
 
-    cdef void _evalaute_a_force(self,
+    cdef void _evalute_a_force(self,
                                 double force[3],
                                 double pos_i[3],
                                 double pos_j[3]):
         pass
 
     cdef double _evaluate_a_scalar_force(self, double pos_i, double pos_j):
-        pass
+        raise RuntimeError("_evaluate_a_scalar_force not overrided in base class")
 
     cdef double _evaluate_a_scalar_potential(self, double pos_i, double pos_j):
-        pass
+        raise RuntimeError("_evaluate_a_scalar_potential not overrided in base class")
 
 
 cdef class LJForceFeild(ForceField):
@@ -133,6 +133,27 @@ cdef class LJForceFeild(ForceField):
         self.sigma = sigma
         self.epsilon = epsilon
         self.r_cutoff = r_cutoff
+
+cdef class BasePyForceField(ForceField):
+    '''Allows Python derived classes to implement force field
+       functionality
+    '''
+
+    def _evaluate_forces(self, forces, positions, neighbors):
+        try:
+            ev = self.evaluate_force
+        except AttributeError:
+            super(PyForceField, self)._evaluate_forces(forces, positions, neighbors)
+        else:
+            ev(forces, positions, neighbors)
+
+    def _evaluate_potential(self, positions, neighbors):
+        try:
+            ev = self.evaluate_potential
+        except AttributeError:
+            super(PyForceField, self)._evaluate_potential(positions, neighbors)
+        else:
+            ev(positions, neighbors)
 
 
 cdef class BaseConfig:
