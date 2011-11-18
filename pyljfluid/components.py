@@ -13,34 +13,52 @@ from base_components import (Parameters, NeighborsTable, ForceField, LJForceFeil
 from util import periodic_distances
 
 
+def create_velocities(N, T=1.0, mass=1.0):
+    return np.random.normal(scale=np.sqrt(T / mass), size=(N, 3))
+
 class Config(BaseConfig):
 
     @classmethod
-    def create(cls, N, rho, sigma=1.0, T=1.0, mass=1.0):
+    def create(cls, N, rho, dt, sigma=1.0, T=1.0, mass=1.0):
         V = N * sigma**3 / rho
         box_size = V**(1/3)
         positions = np.random.uniform(0.0, box_size, (N, 3))
-        velocities = np.random.normal(scale=np.sqrt(T / mass), size=(N, 3))
-        v_rms =  (velocities**2).sum(axis=1).mean() ** 0.5
-        return cls(positions, positions - velocities, box_size)
+        inst = cls(positions, positions, box_size, dt)
+        inst.randomize_velocities(T=T, mass=mass)
+        return inst
+
+    def with_new_positions(self, new_positions):
+        cp = self.__class__(new_positions, None, self.box_size, self.dt)
+        cp.set_velocities(self.calculate_velocities())
+        return cp
+
+    def randomize_velocities(self, **kwds):
+        self.set_velocities(create_velocities(self.N_particles, **kwds))
+
+    def set_velocities(self, velocities):
+        self.last_positions = self.positions - self.dt * velocities
 
     def calculate_velocities(self):
-        return self.positions - self.last_positions
+        return (self.positions - self.last_positions) / self.dt
 
     def calculate_rms_velocity(self):
         v = self.calculate_velocities()
         return (v**2).sum(axis=1).mean()**0.5
 
-    def calculate_temperature(self, mass=1.0):
+    def calculate_kinetic_energy(self, mass=1.0):
         v_rms = self.calculate_rms_velocity()
-        return v_rms**2 * mass / 3
+        return 0.5 * mass * v_rms**2
+
+    def calculate_temperature(self, mass=1.0):
+        KE = self.calculate_kinetic_energy(mass)
+        return 2 * KE / 3
 
     @property
     def N_particles(self):
         return len(self.positions)
 
-    def propagate(self, forces, dt, mass=1.0):
-        positions = -self.last_positions + self.positions + (dt**2 / mass) * forces
+    def propagate(self, forces, mass=1.0):
+        positions = -self.last_positions + 2 * self.positions + (self.dt**2 / mass) * forces
         self.last_positions = self.positions
         self.positions = positions
 
@@ -96,9 +114,7 @@ class EnergyMinimzer(object):
                      maxiter=self.maxiter,
                      callback=self.callback,
                      full_output=True, disp=False)
-        self.config_final =  self.config_init.__class__(self.create_positions(x_final),
-                                                        self.config_init.last_positions,
-                                                        self.config_init.box_size)
+        self.config_final = self.config_init.with_new_positions(self.create_positions(x_final))
         return self.config_final
 
     def evaluate_potential(self, x):
