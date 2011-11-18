@@ -12,10 +12,14 @@ cdef class NeighborsTable:
 
     cdef public double r_forcefield_cutoff
     cdef public double r_skin
-    cdef int* neighbor_indices
-    cdef int N_neighbors, N_allocated
+    cdef unsigned int* neighbor_indices
+    cdef size_t N_neighbors, N_allocated
 
-    cdef _rebuild_neigbors(self, np.ndarray[double, ndim=2] positions)
+    cdef int _rebuild_neigbors(self, np.ndarray[double, ndim=2] positions, double box_size) except -1
+
+    cdef inline int add_neighbor(self, unsigned int i, unsigned int j) except -1
+
+    cdef inline int grow_table(self) except -1
 
 
 cdef class ForceField:
