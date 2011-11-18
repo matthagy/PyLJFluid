@@ -65,10 +65,12 @@ class Config(BaseConfig):
 
 class NeighborsTableTracker(object):
 
-    def __init__(self, neighbors_table, box_size):
+    def __init__(self, neighbors_table, box_size, tolerance=0.9):
         self.neighbors_table = neighbors_table
         self.box_size = box_size
         self.last_positions = None
+        assert 0.0 < tolerance <= 1.0
+        self.tolerance = tolerance
 
     def maybe_rebuild_neighbor(self, current_positions):
         if self.last_positions is None:
@@ -78,7 +80,7 @@ class NeighborsTableTracker(object):
             self.acc_delta += delta
 
             d_r2 = (self.acc_delta**2).sum(axis=1)
-            if d_r2.max() > 0.4:
+            if d_r2.max() > self.tolerance * 0.5 * self.neighbors_table.r_skin:
                 self.rebuild_neighbors(current_positions)
 
         self.last_positions = current_positions
@@ -107,6 +109,7 @@ class EnergyMinimzer(object):
         self.neighbors_table_tracker = NeighborsTableTracker(self.neighbors_table, self.config_init.box_size)
 
     def minimize(self):
+        self.neighbors_table_tracker.maybe_rebuild_neighbor(self.config_init.positions)
         [x_final, self.U_min, self.n_func_calls, self.n_grad_calls, self.warnfalgs
          ] = fmin_cg(self.evaluate_potential,
                      self.config_init.positions,
