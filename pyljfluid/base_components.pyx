@@ -4,13 +4,15 @@ from __future__ import division
 import numpy as np
 cimport numpy as np
 
+cimport cython
 from libc.stdlib cimport malloc, realloc, free
 
 from util cimport c_periodic_distance
 
-def ensure_positions_array(arr):
+
+cdef ensure_N3_array(arr):
     if not isinstance(arr, np.ndarray):
-        raise TypeError("bad argument for positions_array of type %s; must be an ndarray"
+        raise TypeError("bad argument of type %s; must be an ndarray"
                         % (type(arr).__name__,))
     if arr.dtype != np.double:
         raise ValueError("bad array type %s; must be double" % (arr.dtype,))
@@ -18,11 +20,13 @@ def ensure_positions_array(arr):
         raise ValueError("bad array shape %s; must be (N,3)" % (arr.shape,))
     return arr
 
+
 cdef class Parameters:
 
     def __init__(self, mass=1.0, delta_t=0.01):
         self.mass = mass
         self.delta_t = delta_t
+
 
 cdef class NeighborsTable:
 
@@ -64,8 +68,11 @@ cdef class NeighborsTable:
             raise MemoryError
         assert self.N_allocated > self.N_neighbors
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
     cdef int _rebuild_neigbors(self, np.ndarray[double, ndim=2] positions, double box_size) except -1:
-        ensure_positions_array(positions)
+        ensure_N3_array(positions)
         cdef int i, j, k, N
         cdef double r_sqr, r_neighbor_sqr
         cdef double l, half_size
@@ -126,6 +133,13 @@ cdef class ForceField:
     cdef double _evaluate_a_scalar_potential(self, double pos_i, double pos_j):
         raise RuntimeError("_evaluate_a_scalar_potential not overrided in base class")
 
+    def evaluate_forces(self, forces, positions, NeighborsTable neighbors):
+        ensure_N3_array(forces)
+        ensure_N3_array(positions)
+        self._evaluate_forces(forces, positions, neighbors)
+
+
+
 
 cdef class LJForceFeild(ForceField):
 
@@ -134,26 +148,29 @@ cdef class LJForceFeild(ForceField):
         self.epsilon = epsilon
         self.r_cutoff = r_cutoff
 
+
 cdef class BasePyForceField(ForceField):
     '''Allows Python derived classes to implement force field
        functionality
     '''
 
-    def _evaluate_forces(self, forces, positions, neighbors):
-        try:
-            ev = self.evaluate_force
-        except AttributeError:
-            super(PyForceField, self)._evaluate_forces(forces, positions, neighbors)
-        else:
-            ev(forces, positions, neighbors)
+    pass
 
-    def _evaluate_potential(self, positions, neighbors):
-        try:
-            ev = self.evaluate_potential
-        except AttributeError:
-            super(PyForceField, self)._evaluate_potential(positions, neighbors)
-        else:
-            ev(positions, neighbors)
+#     cdef _evaluate_forces(self, forces, positions, neighbors):
+#         try:
+#             ev = self.evaluate_force
+#         except AttributeError:
+#             super(BasePyForceField, self)._evaluate_forces(forces, positions, neighbors)
+#         else:
+#             ev(forces, positions, neighbors)
+
+#     cdef _evaluate_potential(self, positions, neighbors):
+#         try:
+#             ev = self.evaluate_potential
+#         except AttributeError:
+#             super(BasePyForceField, self)._evaluate_potential(positions, neighbors)
+#         else:
+#             ev(positions, neighbors)
 
 
 cdef class BaseConfig:
