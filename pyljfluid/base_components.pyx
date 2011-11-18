@@ -6,6 +6,7 @@ cimport numpy as np
 
 cimport cython
 from libc.stdlib cimport malloc, realloc, free
+from libc.math cimport floor, ceil
 
 from util cimport (c_periodic_direction, c_periodic_distance,
                    c_vector_length, c_vector_sqr_length)
@@ -343,4 +344,43 @@ cdef class System:
 
     pass
 
+
+
+cdef class BasePairCorrelationFunctionCalculator:
+
+    cdef public:
+        double r_prec
+        double r_min
+        size_t N_bins
+        np.ndarray bins
+
+    def __cinit__(self, r_prec, r_max, r_min=0.0):
+        cdef int N_bins = <int>ceil((r_max - r_min) / r_prec)
+        if N_bins <= 0:
+            raise ValueError("bad parameters")
+
+        self.r_prec = r_prec
+        self.r_min = r_min
+        self.N_bins = <size_t>N_bins
+        self.bins = np.zeros(self.N_bins, dtype=np.uint)
+
+    def accumulate_positions(self, np.ndarray[double, ndim=2, mode='c'] positions, double box_size):
+        cdef np.ndarray[unsigned long, ndim=1, mode='c'] bins = self.bins
+        cdef size_t N = positions.shape[0]
+        cdef double pos_i[3], pos_j[3]
+        cdef unsigned int i,j
+        cdef int index
+        cdef double r
+
+        for i in range(N):
+            for k in range(3): pos_i[k] = positions[i, k]
+
+            for j in range(i+1, N):
+                for k in range(3): pos_j[k] = positions[j, k]
+
+                r = c_periodic_distance(pos_i, pos_j, box_size)
+                index = <int>floor((r - self.r_min) / self.r_prec)
+
+                if index >= 0 and index < self.N_bins:
+                    bins[index] += 1
 

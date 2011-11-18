@@ -9,7 +9,7 @@ except ImportError:
         raise RuntimeError('fmin_cg not available; install scipy to use this functionality')
 
 from base_components import (Parameters, NeighborsTable, ForceField, LJForceFeild,
-                             BaseConfig, System)
+                             BaseConfig, System, BasePairCorrelationFunctionCalculator)
 from util import periodic_distances
 
 
@@ -139,6 +139,32 @@ class EnergyMinimzer(object):
         return x.reshape((self.config_init.N_particles, 3)) % self.config_init.box_size
 
 
+
+class PairCorrelationFunctionCalculator(BasePairCorrelationFunctionCalculator):
+
+    def accumulate_config(self, config):
+        self.accumulate_positions(config.positions, config.box_size)
+
+    def calculate_rs(self):
+        return self.r_min + self.r_prec * np.arange(self.N_bins)
+
+    def calculate_gs(self):
+        N = self.bins.sum()
+        if not N:
+            return None
+
+        r_max = self.N_bins * self.r_prec
+        V = 4.0 / 3.0 * np.pi * r_max**3
+        rho = N / V
+
+        rs = self.calculate_rs()
+        vs = 4.0 / 3.0 * np.pi * ((rs + self.r_prec)**3 - rs**3)
+        rhos =  self.bins / vs
+
+        return rhos / rho
+
+    def calculate_hs(self):
+        return self.calculate_gs() - 1.0
 
 
 
