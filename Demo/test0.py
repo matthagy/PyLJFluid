@@ -27,4 +27,11 @@ T = 1.35
 
 config = Config.create(N=N_particles, rho=rho, sigma=forcefield.sigma, T=T, mass=parameters.mass)
 
+
 config.calculate_temperature(mass=parameters.mass)
+
+neighbors_table.rebuild_neighbors(config.positions, config.box_size)
+
+
+
+
