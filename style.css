@@ -27,14 +27,18 @@ body {
 #explain {
     float: left;
     width: 600px;
-    margin: 0 10px 0 50px;
+    margin: 0 10px 0 20px;
 }
 
 #explain h2 {
     font-weight: normal;
     font-size: 20px;
-    margin: 0;
+    margin: 0 0 5px 0;
     padding: 0;
+}
+
+#getsource {
+    color: #4382b4;
 }
 
 #movie {
