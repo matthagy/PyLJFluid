@@ -80,10 +80,10 @@ class Config(BaseConfig):
         return self.N / self.V
 
     def rescale_boxsize(self, new_boxsize):
-        self.box_size = new_boxsize
         velocities = self.calculate_velocities()
         self.positions %= self.box_size
         self.positions *= new_boxsize / self.box_size
+        self.box_size = new_boxsize
         self.set_velocities(velocities)
 
     def rescale_boxsize_rho(self, new_rho):
@@ -110,25 +110,28 @@ class Config(BaseConfig):
 
 class NeighborsTableTracker(object):
 
-    def __init__(self, neighbors_table, box_size, tolerance=0.7):
+    def __init__(self, neighbors_table, box_size):
         self.neighbors_table = neighbors_table
         self.box_size = box_size
         self.last_positions = None
-        assert 0.0 < tolerance <= 1.0
-        self.tolerance = tolerance
 
-    def maybe_rebuild_neighbor(self, current_positions):
-        if self.last_positions is None:
-            self.rebuild_neighbors(current_positions)
-        else:
-            delta = periodic_distances(current_positions, self.last_positions, self.box_size)
-            self.acc_delta += delta
-            dr_max = (self.acc_delta**2).sum(axis=1).max()**0.5
-            r_acceptable = 0.5 * self.neighbors_table.r_skin
-            if dr_max > self.tolerance * r_acceptable:
-                self.rebuild_neighbors(current_positions)
-
+    def reset(self, current_positions):
+        self.neighbors_table.rebuild_neighbors(current_positions, self.box_size)
         self.last_positions = current_positions
+        if self.acc_delta is None:
+            self.acc_delta = np.empty_like(current_positions)
+        self.acc_delta.fill(0.0)
+
+    def moved(self, current_positions):
+        delta = periodic_distances(current_positions, self.last_positions, self.box_size)
+        self.last_positions = current_positions
+        self.acc_delta += delta
+        dr_max = (self.acc_delta**2).sum(axis=1).max()**0.5
+        r_acceptable = 0.5 * self.neighbors_table.r_skin
+        #print 'dr_max=%.3g r_acc=%.3g' % (dr_max, r_acceptable)
+        if dr_max > r_acceptable:
+            return self.rebuild_neighbors(current_positions)
+        return True
 
     acc_delta = None
 
@@ -136,12 +139,13 @@ class NeighborsTableTracker(object):
         old_vital_neighbors = self.find_vital_neighbors(current_positions)
         self.neighbors_table.rebuild_neighbors(current_positions, self.box_size)
         new_vital_neighbors = self.find_vital_neighbors(current_positions)
-        #print len(old_vital_neighbors), len(new_vital_neighbors), self.neighbors_table.size
-        if new_vital_neighbors > old_vital_neighbors:
-            print ("%d dangerous neighbor pairs" % (len(new_vital_neighbors - old_vital_neighbors),))
-        if self.acc_delta is None:
-            self.acc_delta = np.empty_like(current_positions)
+        were_valid = old_vital_neighbors >= new_vital_neighbors
+        print 'old=%d new=%d diff=%d size=%d' % (len(old_vital_neighbors),
+                                                 len(new_vital_neighbors),
+                                                 len(new_vital_neighbors - old_vital_neighbors),
+                                                 self.neighbors_table.size)
         self.acc_delta.fill(0.0)
+        return were_valid
 
     def find_vital_neighbors(self, positions):
         return self.neighbors_table.find_set_of_neighbors_within_distance(self.neighbors_table.r_forcefield_cutoff,
@@ -164,7 +168,7 @@ class EnergyMinimzer(object):
         self.neighbors_table_tracker = NeighborsTableTracker(self.neighbors_table, self.config_init.box_size)
 
     def minimize(self):
-        self.neighbors_table_tracker.maybe_rebuild_neighbor(self.config_init.positions)
+        self.neighbors_table_tracker.reset(self.config_init.positions)
         [x_final, self.U_min, self.n_func_calls, self.n_grad_calls, self.warnfalgs
          ] = fmin_cg(self.evaluate_potential,
                      self.config_init.positions,
@@ -188,7 +192,7 @@ class EnergyMinimzer(object):
         return -self.forces.reshape(3 * self.config_init.N)
 
     def callback(self, x):
-        self.neighbors_table_tracker.maybe_rebuild_neighbor(self.create_positions(x))
+        self.neighbors_table_tracker.moved(self.create_positions(x))
 
     def create_positions(self, x):
         return x.reshape((self.config_init.N, 3)) % self.config_init.box_size
@@ -225,30 +229,54 @@ class PairCorrelationFunctionCalculator(BasePairCorrelationFunctionCalculator):
 
 class MDSimulator(object):
 
-    def __init__(self, config, forcefield, mass=1.0, r_skin=2.0):
+    def __init__(self, config, forcefield, mass=1.0, r_skin=1.0):
         self.config = config
         self.forcefield = forcefield
         self.forces = np.empty_like(config.positions)
         self.mass = mass
         self.neighbors_table = NeighborsTable(r_forcefield_cutoff=self.forcefield.r_cutoff,
                                               r_skin=r_skin)
-        self.setup_neighbors_table_tracker()
+        self.neighbors_table_tracker = NeighborsTableTracker(self.neighbors_table, self.config.box_size)
+        self.neighbors_table_tracker.reset(self.config.positions)
 
-    ntt_tolerance = 0.5
-    def setup_neighbors_table_tracker(self):
-        self.neighbors_table_tracker = NeighborsTableTracker(self.neighbors_table, self.config.box_size,
-                                                             tolerance=self.ntt_tolerance)
+        self.backup_positions = np.empty_like(self.config.positions)
+        self.backup_last_positions = np.empty_like(self.config.last_positions)
+
+    normalize_positions_rate = 20
 
     def cycle(self, n=1):
-        for _ in xrange(n):
-            self.neighbors_table_tracker.maybe_rebuild_neighbor(self.config.positions)
-            self.forcefield.evaluate_forces(self.forces,
-                                            self.config.positions % self.config.box_size,
-                                            self.config.box_size, self.neighbors_table)
-            self.config.propagate(self.forces, self.mass)
+        for i in xrange(n):
+            if not i%self.normalize_positions_rate:
+                self.normalize_positions()
+
+            self.backup_positions[...] = self.config.positions
+            self.backup_last_positions[...] = self.config.last_positions
+            were_neighbors_valid = self.propagate_attempt()
+            if not were_neighbors_valid:
+                self.config.positions[...] = self.backup_positions
+                self.config.last_positions[...] = self.backup_last_positions
+                were_neighbors_valid = self.propagate_attempt()
+                if not were_neighbors_valid:
+                    raise RuntimeError("couldn't create valid neighbor list, increase r_skin")
+
+    def propagate_attempt(self):
+        self.forcefield.evaluate_forces(self.forces,
+                                        self.config.positions % self.config.box_size,
+                                        self.config.box_size, self.neighbors_table)
+        self.config.propagate(self.forces, self.mass)
+        return self.neighbors_table_tracker.moved(self.config.positions)
+
+    def normalize_positions(self):
+        #print 'normalize'
+        self.config.normalize_positions()
+        self.neighbors_table_tracker.reset(self.config.positions)
+
+    def rescale_boxsize_rho(self, rho):
+        #print 'rescale', rho
+        self.config.rescale_boxsize_rho(rho)
+        self.neighbors_table_tracker.reset(self.config.positions)
 
     def evaluate_potential(self):
-        self.neighbors_table_tracker.maybe_rebuild_neighbor(self.config.positions)
         return self.forcefield.evaluate_potential(self.config.positions % self.config.box_size,
                                                   self.config.box_size, self.neighbors_table)
 
@@ -256,7 +284,6 @@ class MDSimulator(object):
         minimizer = EnergyMinimzer(self.config, self.forcefield, maxiter=8,
                                    neighbors_table=self.neighbors_table)
         self.config = minimizer.minimize()
-        self.setup_neighbors_table_tracker()
         return minimizer.U_min
 
     def minimize_until(self, cutoff, verbose=True):
@@ -268,9 +295,6 @@ class MDSimulator(object):
 
     def get_config(self):
         config = self.config.copy()
-        #config.normalize_positions()
+        config.normalize_positions()
         return config
 
-    def rescale_boxsize_rho(self, rho):
-        self.config.rescale_boxsize_rho(rho)
-        self.setup_neighbors_table_tracker()
