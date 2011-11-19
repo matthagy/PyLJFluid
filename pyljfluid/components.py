@@ -16,24 +16,38 @@ from util import periodic_distances
 def create_velocities(N, T=1.0, mass=1.0):
     return np.random.normal(scale=np.sqrt(T / mass), size=(N, 3))
 
+def calculate_box_size(N, sigma, rho):
+    V = N * sigma**3 / rho
+    return V**(1/3)
+
+
 class Config(BaseConfig):
 
     @classmethod
     def create(cls, N, rho, dt, sigma=1.0, T=1.0, mass=1.0):
-        V = N * sigma**3 / rho
-        box_size = V**(1/3)
+        box_size = calculate_box_size(N, sigma, rho)
         positions = np.random.uniform(0.0, box_size, (N, 3))
-        inst = cls(positions, positions, box_size, dt)
+        inst = cls(positions, None, box_size, dt)
         inst.randomize_velocities(T=T, mass=mass)
+        inst.sigma = sigma
         return inst
+
+    def copy(self):
+        cp = self.__class__(self.positions.copy(),
+                            self.last_positions.copy(),
+                            self.box_size,
+                            self.dt)
+        cp.sigma = self.sigma
+        return cp
 
     def with_new_positions(self, new_positions):
         cp = self.__class__(new_positions, None, self.box_size, self.dt)
         cp.set_velocities(self.calculate_velocities())
+        cp.sigma = self.sigma
         return cp
 
     def randomize_velocities(self, **kwds):
-        self.set_velocities(create_velocities(self.N_particles, **kwds))
+        self.set_velocities(create_velocities(self.N, **kwds))
 
     def set_velocities(self, velocities):
         self.last_positions = self.positions - self.dt * velocities
@@ -54,8 +68,36 @@ class Config(BaseConfig):
         return 2 * KE / 3
 
     @property
-    def N_particles(self):
+    def N(self):
         return len(self.positions)
+
+    @property
+    def V(self):
+        return self.box_size**3
+
+    @property
+    def rho(self):
+        return self.N / self.V
+
+    def rescale_boxsize(self, new_boxsize):
+        self.box_size = new_boxsize
+        velocities = self.calculate_velocities()
+        self.positions %= self.box_size
+        self.positions *= new_boxsize / self.box_size
+        self.set_velocities(velocities)
+
+    def rescale_boxsize_rho(self, new_rho):
+        self.rescale_boxsize(calculate_box_size(self.N, self.sigma, new_rho))
+
+    def normalize_positions(self):
+        velocities = self.calculate_velocities()
+        self.positions %= self.box_size
+        self.set_velocities(velocities)
+
+    def change_dt(self, dt):
+        velocities = self.calculate_velocities()
+        self.dt = dt
+        self.set_velocities(velocities)
 
     def propagate(self, forces, mass=1.0):
         positions = -self.last_positions + 2 * self.positions + (self.dt**2 / mass) * forces
@@ -133,13 +175,13 @@ class EnergyMinimzer(object):
                                         self.create_positions(x),
                                         self.config_init.box_size,
                                         self.neighbors_table)
-        return -self.forces.reshape(3 * self.config_init.N_particles)
+        return -self.forces.reshape(3 * self.config_init.N)
 
     def callback(self, x):
         self.neighbors_table_tracker.maybe_rebuild_neighbor(self.create_positions(x))
 
     def create_positions(self, x):
-        return x.reshape((self.config_init.N_particles, 3)) % self.config_init.box_size
+        return x.reshape((self.config_init.N, 3)) % self.config_init.box_size
 
 
 

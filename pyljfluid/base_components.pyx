@@ -46,6 +46,9 @@ cdef class NeighborsTable:
     def __dealloc__(self):
         free(self.neighbor_indices)
 
+    def __reduce__(self):
+        return (NeighborsTable, (self.r_forcefield_cutoff, self.r_skin))
+
     cdef inline int add_neighbor(self, unsigned int i, unsigned int j) except -1:
         if self.N_neighbors == self.N_allocated:
             self.grow_table()
@@ -226,7 +229,7 @@ cdef class ForceField:
         ensure_N3_array(positions)
         cdef double U
         self._evaluate_potential(&U, positions, box_size, neighbors)
-        return U
+        return U / positions.shape[0]
 
     def evaluate_scalar_force(self, r):
         cdef double cr, f
@@ -241,7 +244,7 @@ cdef class ForceField:
         ensure_N3_array(positions)
         cdef double r
         self._evaluate_excess_virial(&r, positions, box_size, neighbors)
-        return r
+        return r / positions.shape[0]
 
 
 
@@ -401,7 +404,7 @@ cdef class BasePairCorrelationFunctionCalculator:
         size_t N_bins
         np.ndarray bins
 
-    def __cinit__(self, r_prec, r_max, r_min=0.0):
+    def __cinit__(self, r_prec, r_max, r_min=0.0, bins=None):
         cdef int N_bins = <int>ceil((r_max - r_min) / r_prec)
         if N_bins <= 0:
             raise ValueError("bad parameters")
@@ -409,7 +412,14 @@ cdef class BasePairCorrelationFunctionCalculator:
         self.r_prec = r_prec
         self.r_min = r_min
         self.N_bins = <size_t>N_bins
-        self.bins = np.zeros(self.N_bins, dtype=np.uint)
+        if bins is None:
+            bins = np.zeros(self.N_bins, dtype=np.uint)
+        if bins.shape != (self.N_bins,) or bins.dtype != np.uint:
+            raise TypeError("bad bins argument")
+        self.bins = bins
+
+    def __reduce__(self):
+        return self.__class__, (self.r_prec, self.r_max, self.r_min, self.bins.copy())
 
     def accumulate_positions(self, np.ndarray[double, ndim=2, mode='c'] positions, double box_size):
         cdef np.ndarray[unsigned long, ndim=1, mode='c'] bins = self.bins
