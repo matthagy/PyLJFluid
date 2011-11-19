@@ -36,6 +36,12 @@ cdef class ForceField:
                                  double box_size,
                                  NeighborsTable neighbors) except -1
 
+    cdef int _evaluate_excess_virial(self,
+                                     double *,
+                                     np.ndarray[double, ndim=2, mode='c'] positions,
+                                     double box_size,
+                                     NeighborsTable neighbors) except -1
+
     # force on particle i (negative force on particle j)
     cdef int _evaluate_a_force(self,
                                double force[3],

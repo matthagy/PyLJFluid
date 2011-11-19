@@ -143,6 +143,36 @@ cdef class ForceField:
             for k in range(3): forces[inx_i, k] += force[k]
             for k in range(3): forces[inx_j, k] -= force[k]
 
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    cdef int _evaluate_excess_virial(self,
+                                     double *res_p,
+                                     np.ndarray[double, ndim=2, mode='c'] positions,
+                                     double box_size,
+                                     NeighborsTable neighbors) except -1:
+        cdef unsigned int* neighbor_indices = neighbors.neighbor_indices
+        cdef size_t N_neighbors = neighbors.N_neighbors
+        cdef unsigned int neighbor_i, inx_i, inx_j, k
+        cdef double force[3], pos_i[3], pos_j[3], r_ij[3], r, f, acc
+
+        acc = 0.0
+        for neighbor_i in range(N_neighbors):
+            inx_i = neighbor_indices[2 * neighbor_i]
+            inx_j = neighbor_indices[2 * neighbor_i + 1]
+
+            for k in range(3): pos_i[k] = positions[inx_i, k]
+            for k in range(3): pos_j[k] = positions[inx_j, k]
+            c_periodic_direction(r_ij, pos_i, pos_j, box_size)
+
+            r = c_vector_length(r_ij)
+            self._evaluate_a_scalar_force(&f, r)
+
+            acc += r * f
+
+        res_p[0] = -acc
+
     cdef int _evaluate_potential(self, double *U_p,
                                  np.ndarray[double, ndim=2] positions,
                                  double box_size,
@@ -206,6 +236,12 @@ cdef class ForceField:
             cr = r
             self._evaluate_a_scalar_force(&f, cr)
             return f
+
+    def evaluate_excess_virial(self, positions, double box_size, NeighborsTable neighbors):
+        ensure_N3_array(positions)
+        cdef double r
+        self._evaluate_excess_virial(&r, positions, box_size, neighbors)
+        return r
 
 
 
