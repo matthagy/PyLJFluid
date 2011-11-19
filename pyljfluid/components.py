@@ -213,4 +213,52 @@ class PairCorrelationFunctionCalculator(BasePairCorrelationFunctionCalculator):
 
 
 
+class MDSimulator(object):
 
+    def __init__(self, config, forcefield, mass=1.0):
+        self.config = config
+        self.forcefield = forcefield
+        self.forces = np.empty_like(config.positions)
+        self.mass = mass
+        self.neighbors_table = NeighborsTable(r_forcefield_cutoff=self.forcefield.r_cutoff,
+                                              r_skin=1.0)
+        self.setup_neighbors_table_tracker()
+
+    def setup_neighbors_table_tracker(self):
+        self.neighbors_table_tracker = NeighborsTableTracker(self.neighbors_table, self.config.box_size)
+
+    def cycle(self, n=1):
+        for _ in xrange(n):
+            self.neighbors_table_tracker.maybe_rebuild_neighbor(self.config.positions)
+            self.forcefield.evaluate_forces(self.forces,
+                                            self.config.positions % self.config.box_size,
+                                            self.config.box_size, self.neighbors_table)
+            self.config.propagate(self.forces, self.mass)
+
+    def evaluate_potential(self):
+        self.neighbors_table_tracker.maybe_rebuild_neighbor(self.config.positions)
+        return self.forcefield.evaluate_potential(self.config.positions % self.config.box_size,
+                                                  self.config.box_size, self.neighbors_table)
+
+    def minimize(self, maxiter=10):
+        minimizer = EnergyMinimzer(self.config, self.forcefield, maxiter=8,
+                                   neighbors_table=self.neighbors_table)
+        self.config = minimizer.minimize()
+        self.setup_neighbors_table_tracker()
+        return minimizer.U_min
+
+    def minimize_until(self, cutoff, verbose=True):
+        while True:
+            U_min = self.minimize(100)
+            print '%.4e' % U_min
+            if U_min < cutoff:
+                return U_min
+
+    def get_config(self):
+        config = self.config.copy()
+        #config.normalize_positions()
+        return config
+
+    def rescale_boxsize_rho(self, rho):
+        self.config.rescale_boxsize_rho(rho)
+        self.setup_neighbors_table_tracker()
