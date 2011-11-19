@@ -1,0 +1,25 @@
+body {
+    font:100%/1.4 Arial, Helvetica, sans-serif;
+    margin-bottom:10px;
+}
+
+#head {
+    border-bottom:1px solid #CCC;
+    padding-bottom:10px;
+    magin-bottom:10px;
+    font-weight: normal;
+}
+
+#head a {
+    display:block;
+    text-decoration: none;
+    color: #4382b4;
+}
+
+#head a:hover {
+    text-decoration: underline;
+}
+
+
+#head span {
+}
