@@ -110,7 +110,7 @@ class Config(BaseConfig):
 
 class NeighborsTableTracker(object):
 
-    def __init__(self, neighbors_table, box_size, tolerance=0.9):
+    def __init__(self, neighbors_table, box_size, tolerance=0.7):
         self.neighbors_table = neighbors_table
         self.box_size = box_size
         self.last_positions = None
@@ -123,19 +123,29 @@ class NeighborsTableTracker(object):
         else:
             delta = periodic_distances(current_positions, self.last_positions, self.box_size)
             self.acc_delta += delta
-
-            d_r2 = (self.acc_delta**2).sum(axis=1)
-            if d_r2.max() > self.tolerance * 0.5 * self.neighbors_table.r_skin:
+            dr_max = (self.acc_delta**2).sum(axis=1).max()**0.5
+            r_acceptable = 0.5 * self.neighbors_table.r_skin
+            if dr_max > self.tolerance * r_acceptable:
                 self.rebuild_neighbors(current_positions)
 
         self.last_positions = current_positions
 
+    acc_delta = None
+
     def rebuild_neighbors(self, current_positions):
+        old_vital_neighbors = self.find_vital_neighbors(current_positions)
         self.neighbors_table.rebuild_neighbors(current_positions, self.box_size)
-        self.acc_delta = np.zeros_like(current_positions)
+        new_vital_neighbors = self.find_vital_neighbors(current_positions)
+        #print len(old_vital_neighbors), len(new_vital_neighbors), self.neighbors_table.size
+        if new_vital_neighbors > old_vital_neighbors:
+            print ("%d dangerous neighbor pairs" % (len(new_vital_neighbors - old_vital_neighbors),))
+        if self.acc_delta is None:
+            self.acc_delta = np.empty_like(current_positions)
+        self.acc_delta.fill(0.0)
 
-
-
+    def find_vital_neighbors(self, positions):
+        return self.neighbors_table.find_set_of_neighbors_within_distance(self.neighbors_table.r_forcefield_cutoff,
+                                                                          positions, self.box_size)
 
 class EnergyMinimzer(object):
 
@@ -215,17 +225,19 @@ class PairCorrelationFunctionCalculator(BasePairCorrelationFunctionCalculator):
 
 class MDSimulator(object):
 
-    def __init__(self, config, forcefield, mass=1.0):
+    def __init__(self, config, forcefield, mass=1.0, r_skin=2.0):
         self.config = config
         self.forcefield = forcefield
         self.forces = np.empty_like(config.positions)
         self.mass = mass
         self.neighbors_table = NeighborsTable(r_forcefield_cutoff=self.forcefield.r_cutoff,
-                                              r_skin=1.0)
+                                              r_skin=r_skin)
         self.setup_neighbors_table_tracker()
 
+    ntt_tolerance = 0.5
     def setup_neighbors_table_tracker(self):
-        self.neighbors_table_tracker = NeighborsTableTracker(self.neighbors_table, self.config.box_size)
+        self.neighbors_table_tracker = NeighborsTableTracker(self.neighbors_table, self.config.box_size,
+                                                             tolerance=self.ntt_tolerance)
 
     def cycle(self, n=1):
         for _ in xrange(n):

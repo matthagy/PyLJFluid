@@ -7,8 +7,10 @@ cimport numpy as np
 cimport cython
 from libc.stdlib cimport malloc, realloc, free
 from libc.math cimport floor, ceil
+cimport cpython.set
 
 from util cimport (c_periodic_direction, c_periodic_distance,
+                   c_periodic_distance_sqr,
                    c_vector_length, c_vector_sqr_length)
 
 
@@ -80,7 +82,7 @@ cdef class NeighborsTable:
     @cython.boundscheck(False)
     @cython.wraparound(False)
     @cython.nonecheck(False)
-    cdef int _rebuild_neigbors(self, np.ndarray[double, ndim=2] positions, double box_size) except -1:
+    cdef int _rebuild_neigbors(self, np.ndarray[double, ndim=2, mode='c'] positions, double box_size) except -1:
         ensure_N3_array(positions)
         cdef int i, j, k, N
         cdef double r_sqr, r_neighbor_sqr
@@ -115,6 +117,33 @@ cdef class NeighborsTable:
             positions = op
             assert box_size is not None
         self._rebuild_neigbors(positions, box_size)
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.nonecheck(False)
+    def find_set_of_neighbors_within_distance(self, double r_cutoff,
+                                              np.ndarray[double, ndim=2, mode='c'] positions,
+                                              double box_size):
+        cdef double *positions_p = <double *>np.PyArray_DATA(positions)
+        cdef unsigned int* neighbor_indices = self.neighbor_indices
+        cdef size_t N_neighbors = self.N_neighbors
+        cdef unsigned int neighbor_i, inx_i, inx_j, k
+        cdef double r2, r2_cutoff = r_cutoff**2
+        collect = set()
+
+        for neighbor_i in range(N_neighbors):
+            inx_i = neighbor_indices[2 * neighbor_i]
+            inx_j = neighbor_indices[2 * neighbor_i + 1]
+            r2 = c_periodic_distance_sqr(positions_p + inx_i,
+                                         positions_p + inx_j,
+                                         box_size)
+            if r2 <= r2_cutoff:
+                assert inx_i < inx_j
+                cpython.set.PySet_Add(collect, (inx_i, inx_j))
+
+        return collect
+
+
 
 
 cdef class ForceField:
