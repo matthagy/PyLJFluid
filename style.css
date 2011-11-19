@@ -23,3 +23,33 @@ body {
 
 #head span {
 }
+
+#explain {
+    float: left;
+    width: 600px;
+    margin: 0 10px 0 20px;
+}
+
+#explain h2 {
+    font-weight: normal;
+    font-size: 20px;
+    margin: 0 0 5px 0;
+    padding: 0;
+}
+
+#getsource {
+    color: #4382b4;
+}
+
+#movie {
+    float: left;
+}
+
+pre {
+	background-color: #f0f0f0;
+	border-top: 1px solid #ccc;
+	border-bottom: 1px solid #ccc;
+	padding: 5px;
+	font-size: 13px;
+	font-family: Bitstream Vera Sans Mono,monospace;
+}
