@@ -198,6 +198,14 @@ cdef class ForceField:
         self._evaluate_potential(&U, positions, box_size, neighbors)
         return U
 
+    def evaluate_scalar_force(self, r):
+        cdef double cr, f
+        if isinstance(r, np.ndarray):
+            return np.array(map(self.evaluate_scalar_force, r.flat)).reshape(r.shape)
+        else:
+            cr = r
+            self._evaluate_a_scalar_force(&f, cr)
+            return f
 
 
 
