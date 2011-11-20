@@ -9,10 +9,10 @@ typedef unsigned int uint;
 #define dok3 for (int k=0; k<3; k++)
 
 void
-PyLJFluid_evaluate_LJ_forces(double *forces,
+PyLJFluid_evaluate_LJ_forces(double *OPT_RESTRICT forces,
                              size_t N_neighbors,
-                             uint* neighbors,
-                             double *positions,
+                             uint *OPT_RESTRICT neighbors,
+                             double *OPT_RESTRICT positions,
                              double box_size,
                              double sigma, double epsilon, double r_cutoff)
 {
