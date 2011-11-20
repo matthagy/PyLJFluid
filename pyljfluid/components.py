@@ -140,10 +140,10 @@ class NeighborsTableTracker(object):
         self.neighbors_table.rebuild_neighbors(current_positions, self.box_size)
         new_vital_neighbors = self.find_vital_neighbors(current_positions)
         were_valid = old_vital_neighbors >= new_vital_neighbors
-        print 'old=%d new=%d diff=%d size=%d' % (len(old_vital_neighbors),
-                                                 len(new_vital_neighbors),
-                                                 len(new_vital_neighbors - old_vital_neighbors),
-                                                 self.neighbors_table.size)
+#         print 'old=%d new=%d diff=%d size=%d' % (len(old_vital_neighbors),
+#                                                  len(new_vital_neighbors),
+#                                                  len(new_vital_neighbors - old_vital_neighbors),
+#                                                  self.neighbors_table.size)
         self.acc_delta.fill(0.0)
         return were_valid
 
