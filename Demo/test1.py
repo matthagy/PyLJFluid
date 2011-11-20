@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 
 from pyljfluid.components import (Parameters,
                                   NeighborsTable, NeighborsTableTracker,
-                                  LJForceFeild, Config,
+                                  LJForceField, Config,
                                   System, EnergyMinimzer,
                                   PairCorrelationFunctionCalculator)
 
@@ -15,7 +15,7 @@ parameters = Parameters(
     mass=1.0,
     delta_t=1e-2)
 
-forcefield = LJForceFeild(
+forcefield = LJForceField(
     sigma=1.0,
     epsilon=1.0,
     r_cutoff=3.3)
