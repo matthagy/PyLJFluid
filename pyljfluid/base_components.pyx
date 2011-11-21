@@ -410,23 +410,22 @@ cdef class BasePairCorrelationFunctionCalculator:
     def __reduce__(self):
         return self.__class__, (self.r_prec, self.r_max, self.r_min, self.bins.copy())
 
-    def accumulate_positions(self, np.ndarray[double, ndim=2, mode='c'] positions, double box_size):
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    @cython.cdivision(True)
+    def accumulate_positions(self, np.ndarray[double, ndim=2, mode='c'] positions not None,
+                             double box_size):
+        cdef double *positions_p = <double *>np.PyArray_DATA(positions)
         cdef np.ndarray[unsigned long, ndim=1, mode='c'] bins = self.bins
         cdef size_t N = positions.shape[0]
-        cdef double pos_i[3], pos_j[3]
         cdef unsigned int i,j
         cdef int index
         cdef double r
 
         for i in range(N):
-            for k in range(3): pos_i[k] = positions[i, k]
-
             for j in range(i+1, N):
-                for k in range(3): pos_j[k] = positions[j, k]
-
-                r = c_periodic_distance(pos_i, pos_j, box_size)
+                r = c_periodic_distance(positions_p + i, positions_p + j, box_size)
                 index = <int>floor((r - self.r_min) / self.r_prec)
-
                 if index >= 0 and index < self.N_bins:
                     bins[index] += 1
 
