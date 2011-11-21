@@ -428,8 +428,7 @@ cdef class System:
 cdef class BasePairCorrelationFunctionCalculator:
 
     cdef public:
-        double r_prec
-        double r_min
+        double r_prec, r_min, r_max
         size_t N_bins
         np.ndarray bins
 
@@ -440,6 +439,7 @@ cdef class BasePairCorrelationFunctionCalculator:
 
         self.r_prec = r_prec
         self.r_min = r_min
+        self.r_max = r_max
         self.N_bins = <size_t>N_bins
         if bins is None:
             bins = np.zeros(self.N_bins, dtype=np.uint)
