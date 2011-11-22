@@ -128,7 +128,6 @@ class NeighborsTableTracker(object):
         self.acc_delta += delta
         dr_max = (self.acc_delta**2).sum(axis=1).max()**0.5
         r_acceptable = 0.5 * self.neighbors_table.r_skin
-        #print 'dr_max=%.3g r_acc=%.3g' % (dr_max, r_acceptable)
         if dr_max > r_acceptable:
             return self.rebuild_neighbors(current_positions)
         return True
@@ -267,12 +266,10 @@ class MDSimulator(object):
         return self.neighbors_table_tracker.moved(self.config.positions)
 
     def normalize_positions(self):
-        #print 'normalize'
         self.config.normalize_positions()
         self.neighbors_table_tracker.reset(self.config.positions)
 
     def rescale_boxsize_rho(self, rho):
-        #print 'rescale', rho
         self.config.rescale_boxsize_rho(rho)
         self.neighbors_table_tracker.reset(self.config.positions)
 
@@ -289,7 +286,8 @@ class MDSimulator(object):
     def minimize_until(self, cutoff, verbose=True):
         while True:
             U_min = self.minimize(100)
-            print '%.4e' % U_min
+            if verbose:
+                print '%.4e' % U_min
             if U_min < cutoff:
                 return U_min
 
