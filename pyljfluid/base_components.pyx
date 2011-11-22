@@ -51,14 +51,6 @@ cdef class NeighborsTable:
     def __reduce__(self):
         return (NeighborsTable, (self.r_forcefield_cutoff, self.r_skin))
 
-    cdef inline int add_neighbor(self, unsigned int i, unsigned int j) except -1:
-        if self.N_neighbors == self.N_allocated:
-            self.grow_table()
-
-        self.neighbor_indices[2 * self.N_neighbors] = i
-        self.neighbor_indices[2 * self.N_neighbors + 1] = j
-        self.N_neighbors += 1
-
     property size:
         def __get__(self):
             return self.N_neighbors
@@ -67,7 +59,14 @@ cdef class NeighborsTable:
         def __get__(self):
             return self.N_allocated
 
-    cdef inline int grow_table(self) except -1:
+    cdef int add_neighbor(self, unsigned int i, unsigned int j) except -1:
+        if self.N_neighbors == self.N_allocated:
+            self.grow_table()
+        self.neighbor_indices[2 * self.N_neighbors] = i
+        self.neighbor_indices[2 * self.N_neighbors + 1] = j
+        self.N_neighbors += 1
+
+    cdef int grow_table(self) except -1:
         cdef size_t alloc_size = 8192
         if self.neighbor_indices == NULL:
             self.N_allocated = alloc_size

@@ -17,9 +17,9 @@ cdef class NeighborsTable:
 
     cdef int _rebuild_neigbors(self, np.ndarray[double, ndim=2] positions, double box_size) except -1
 
-    cdef inline int add_neighbor(self, unsigned int i, unsigned int j) except -1
+    cdef int add_neighbor(self, unsigned int i, unsigned int j) except -1
 
-    cdef inline int grow_table(self) except -1
+    cdef int grow_table(self) except -1
 
 
 cdef class ForceField:
