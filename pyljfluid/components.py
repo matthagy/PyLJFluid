@@ -122,29 +122,28 @@ class NeighborsTableTracker(object):
             self.acc_delta = np.empty_like(current_positions)
         self.acc_delta.fill(0.0)
 
-    def moved(self, current_positions):
+    def moved(self, current_positions, check_were_valid=True):
         delta = periodic_distances(current_positions, self.last_positions, self.box_size)
         self.last_positions = current_positions
         self.acc_delta += delta
         dr_max = (self.acc_delta**2).sum(axis=1).max()**0.5
         r_acceptable = 0.5 * self.neighbors_table.r_skin
         if dr_max > r_acceptable:
-            return self.rebuild_neighbors(current_positions)
+            return self.rebuild_neighbors(current_positions, check_were_valid=check_were_valid)
         return True
 
     acc_delta = None
 
-    def rebuild_neighbors(self, current_positions):
-        old_vital_neighbors = self.find_vital_neighbors(current_positions)
+    def rebuild_neighbors(self, current_positions, check_were_valid=True):
+        if check_were_valid:
+            old_vital_neighbors = self.find_vital_neighbors(current_positions)
         self.neighbors_table.rebuild_neighbors(current_positions, self.box_size)
-        new_vital_neighbors = self.find_vital_neighbors(current_positions)
-        were_valid = old_vital_neighbors >= new_vital_neighbors
-#         print 'old=%d new=%d diff=%d size=%d' % (len(old_vital_neighbors),
-#                                                  len(new_vital_neighbors),
-#                                                  len(new_vital_neighbors - old_vital_neighbors),
-#                                                  self.neighbors_table.size)
+        if check_were_valid:
+            new_vital_neighbors = self.find_vital_neighbors(current_positions)
+            were_valid = old_vital_neighbors >= new_vital_neighbors
         self.acc_delta.fill(0.0)
-        return were_valid
+        if check_were_valid:
+            return were_valid
 
     def find_vital_neighbors(self, positions):
         return self.neighbors_table.find_set_of_neighbors_within_distance(self.neighbors_table.r_forcefield_cutoff,
@@ -256,14 +255,14 @@ class MDSimulator(object):
                 self.config.last_positions[...] = self.backup_last_positions
                 were_neighbors_valid = self.propagate_attempt()
                 if not were_neighbors_valid:
-                    raise RuntimeError("couldn't create valid neighbor list, increase r_skin")
+                    raise RuntimeError("couldn't create valid neighbor list, increase r_skin or decrease dt")
 
     def propagate_attempt(self):
         self.forcefield.evaluate_forces(self.forces,
                                         self.config.positions % self.config.box_size,
                                         self.config.box_size, self.neighbors_table)
         self.config.propagate(self.forces, self.mass)
-        return self.neighbors_table_tracker.moved(self.config.positions)
+        return self.neighbors_table_tracker.moved(self.config.positions, check_were_valid=True)
 
     def normalize_positions(self):
         self.config.normalize_positions()
