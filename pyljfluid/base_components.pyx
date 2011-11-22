@@ -416,13 +416,13 @@ cdef class BasePairCorrelationFunctionCalculator:
                              double box_size):
         cdef double *positions_p = <double *>np.PyArray_DATA(positions)
         cdef np.ndarray[unsigned long, ndim=1, mode='c'] bins = self.bins
-        cdef size_t N = positions.shape[0]
+        cdef size_t N3 = 3*positions.shape[0]
         cdef unsigned int i,j
         cdef int index
         cdef double r
 
-        for i in range(N):
-            for j in range(i+1, N):
+        for i in range(0, N3, 3):
+            for j in range(i+3, N3, 3):
                 r = c_periodic_distance(positions_p + i, positions_p + j, box_size)
                 index = <int>floor((r - self.r_min) / self.r_prec)
                 if index >= 0 and index < self.N_bins:
