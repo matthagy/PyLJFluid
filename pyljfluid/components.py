@@ -8,8 +8,8 @@ except ImportError:
     def fmin_cg(*args, **kwds):
         raise RuntimeError('fmin_cg not available; install scipy to use this functionality')
 
-from base_components import (Parameters, NeighborsTable, ForceField, LJForceField,
-                             BaseConfig, System, BasePairCorrelationFunctionCalculator)
+from base_components import (NeighborsTable, ForceField, LJForceField,
+                             BaseConfig, BasePairCorrelationFunctionCalculator)
 from util import periodic_distances
 
 
@@ -297,4 +297,5 @@ class MDSimulator(object):
         config = self.config.copy()
         config.normalize_positions()
         return config
+
 

@@ -29,13 +29,6 @@ cdef ensure_N3_array(arr):
     return arr
 
 
-cdef class Parameters:
-
-    def __init__(self, mass=1.0, delta_t=0.01):
-        self.mass = mass
-        self.delta_t = delta_t
-
-
 cdef class NeighborsTable:
 
     def __cinit__(self, double r_forcefield_cutoff, double r_skin):
@@ -375,13 +368,6 @@ cdef class BaseConfig:
         self.last_positions = last_positions
         self.box_size = box_size
         self.dt = dt
-
-
-
-cdef class System:
-
-    pass
-
 
 
 cdef class BasePairCorrelationFunctionCalculator:

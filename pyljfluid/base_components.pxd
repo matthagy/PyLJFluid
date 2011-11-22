@@ -2,12 +2,6 @@
 cimport numpy as np
 
 
-cdef class Parameters:
-
-    cdef public double mass
-    cdef public double delta_t
-
-
 cdef class NeighborsTable:
 
     cdef public double r_forcefield_cutoff
@@ -71,7 +65,3 @@ cdef class BaseConfig:
     cdef public double box_size
     cdef public double dt
 
-cdef class System:
-
-    cdef public Parameters parameters
-    cdef public BaseConfig current_config
