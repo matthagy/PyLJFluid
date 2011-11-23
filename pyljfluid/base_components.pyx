@@ -26,6 +26,8 @@ cdef ensure_N3_array(arr):
         raise ValueError("bad array type %s; must be double" % (arr.dtype,))
     if not (len(arr.shape) == 2 and arr.shape[1] == 3):
         raise ValueError("bad array shape %s; must be (N,3)" % (arr.shape,))
+    if not arr.flags.c_contiguous:
+        raise ValueError("array must be C contiguous")
     return arr
 
 
@@ -198,7 +200,7 @@ cdef class ForceField:
         res_p[0] = -acc
 
     cdef int _evaluate_potential(self, double *U_p,
-                                 np.ndarray[double, ndim=2] positions,
+                                 np.ndarray[double, ndim=2, mode='c'] positions,
                                  double box_size,
                                  NeighborsTable neighbors) except -1:
 
@@ -356,8 +358,8 @@ cdef class BasePyForceField(ForceField):
 cdef class BaseConfig:
 
     def __cinit__(self,
-                  np.ndarray[double, ndim=2] positions not None,
-                  np.ndarray[double, ndim=2] last_positions,
+                  np.ndarray[double, ndim=2, mode='c'] positions not None,
+                  np.ndarray[double, ndim=2, mode='c'] last_positions,
                   double box_size,
                   double dt):
         ensure_N3_array(positions)
