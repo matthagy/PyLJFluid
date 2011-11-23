@@ -14,7 +14,7 @@
 
     <div id="explain">
       <h2>
-        Reproduce and extend the original computer <i>experiments</i> with Lennard-Jones
+        Reproduce and extend the original computer &ldquo;<i>experiments</i>&rdquo; with Lennard-Jones
         fluids using modern tools.
       </h2>
 
@@ -42,11 +42,12 @@
 
 <span class="c"># Equilibrate</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
-    <span class="n">sim</span><span class="o">.</span><span class="n">rescale_velocities</span><span class="p">()</span>
+    <span class="n">sim</span><span class="o">.</span><span class="n">config</span>.</span><span class="n">randomize_velocities</span><span class="p">(T)</span>
     <span class="n">sim</span><span class="o">.</span><span class="n">cycle</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span>
 
 <span class="c"># Produce data</span>
-<span class="n">pcc</span> <span class="o">=</span> <span class="n">PairCorrelationFunctionCalculator</span><span class="p">(</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">config0</span><span class="o">.</span><span class="n">box_size</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+<span class="n">pcc</span> <span class="o">=</span> <span class="n">PairCorrelationFunctionCalculator</span><span class="p">(dr=</span><span class="mf">0.01</span><span class="p">*forcefield.sigma,</span> 
+                                        r_max=<span class="n">config0</span><span class="o">.</span><span class="n">box_size</span><span class="o">/</span><span class="mi">2</span><span class="p">)</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
     <span class="n">sim</span><span class="o">.</span><span class="n">cycle</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span>
     <span class="n">pcc</span><span class="o">.</span><span class="n">accumulate_config</span><span class="p">(</span><span class="n">sim</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
@@ -62,8 +63,10 @@
 
     </div>
 
-    <div id="movie">
+    <div id="results">
       <img src="animate2.gif" alt="LJ simulation snapshots"/>
+      <br/>
+      <img src="gr.png" alt="pair correlation function g(r) results"/>
     </div>
 
   </body>
