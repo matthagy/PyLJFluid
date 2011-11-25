@@ -44,6 +44,7 @@ body {
 
 #results img {
     float: left;
+    margin-bottom: 20px;
 }
 
 pre {
