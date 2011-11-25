@@ -1,6 +1,8 @@
 
 from __future__ import division
 
+from functools import wraps
+
 import numpy as np
 try:
     from scipy.optimize import fmin_cg
@@ -203,35 +205,6 @@ class EnergyMinimzer(object):
         return x.reshape((self.config_init.N, 3)) % self.config_init.box_size
 
 
-
-class PairCorrelationFunctionCalculator(BasePairCorrelationFunctionCalculator):
-
-    def accumulate_config(self, config):
-        self.accumulate_positions(config.positions, config.box_size)
-
-    def calculate_rs(self):
-        return self.r_min + self.r_prec * np.arange(self.N_bins)
-
-    def calculate_gs(self):
-        N = self.bins.sum()
-        if not N:
-            return None
-
-        r_max = self.N_bins * self.r_prec
-        V = 4.0 / 3.0 * np.pi * r_max**3
-        rho = N / V
-
-        rs = self.calculate_rs()
-        vs = 4.0 / 3.0 * np.pi * ((rs + self.r_prec)**3 - rs**3)
-        rhos =  self.bins / vs
-
-        return rhos / rho
-
-    def calculate_hs(self):
-        return self.calculate_gs() - 1.0
-
-
-
 class MDSimulator(object):
 
     def __init__(self, config, forcefield, mass=1.0, r_skin=1.0):
@@ -301,5 +274,127 @@ class MDSimulator(object):
         config = self.config.copy()
         config.normalize_positions()
         return config
+
+
+def cached_property(name_or_func, cache_name=None):
+    if isinstance(name_or_func, basestring):
+        return lambda func: cached_property(func, cache_name=name_or_func)
+
+    func = name_or_func
+    assert callable(func)
+
+    if cache_name is None:
+        cache_name = '_' + func.func_name
+    assert isinstance(cache_name, basestring)
+
+    @property
+    @wraps(func)
+    def wrapper(self):
+        try:
+            return getattr(self, cache_name)
+        except AttributeError:
+            value = func(self)
+            setattr(self, cache_name, value)
+            return value
+    return wrapper
+
+
+class PairCorrelationData(object):
+
+    def __init__(self, bins, r_min, r_prec):
+        self.bins = bins
+        self.r_min = r_min
+        self.r_prec = r_prec
+
+    @cached_property
+    def r(self):
+        return self.r_min + self.r_prec * np.arange(self.bins.size)
+
+    @cached_property
+    def g(self):
+        N = self.bins.sum()
+        if not N:
+            return None
+
+        r_max = self.bins.size * self.r_prec
+        V = 4.0 / 3.0 * np.pi * r_max**3
+        rho = N / V
+        v = 4.0 / 3.0 * np.pi * ((self.r + self.r_prec)**3 - self.r**3)
+        rhos =  self.bins / v
+        return rhos / rho
+
+    @cached_property
+    def h(self):
+        return self.g - 1.0
+
+
+class PairCorrelationFunctionCalculator(BasePairCorrelationFunctionCalculator):
+
+    def accumulate_config(self, config):
+        self.accumulate_positions(config.positions, config.box_size)
+
+    def get_data(self):
+        return PairCorrelationData(self.bins.copy(), self.r_min, self.r_prec)
+
+
+class PairCorrelationIntegrator(object):
+
+    def __init__(self, pc_data, forcefield, rho=None, beta=None):
+        self.pc_data = pc_data
+        self.forcefield = forcefield
+        self.rho = rho
+        self.beta = beta
+
+    def integrate_g_product_over_space_ex(self, func, where):
+        r = self.pc_data.r[where]
+        g = self.pc_data.g[where]
+        return np.trapz(4*np.pi*r**2 * g * func(r), r)
+
+    @cached_property
+    def where_sparse(self):
+        return self.pc_data.g != 0.0
+
+    def integrate_g_product_over_space(self, func):
+        return self.integrate_g_product_over_space_ex(func, self.where_sparse)
+
+    @cached_property
+    def where_sparse_and_in_cutoff(self):
+        return (self.pc_data.g != 0.0) & (self.pc_data.r <= self.forcefield.r_cutoff)
+
+    def integrate_g_product_over_space_in_cutoff(self, func):
+        return self.integrate_g_product_over_space_ex(func, self.where_sparse_and_in_cutoff)
+
+    @cached_property
+    def excess_internal_energy(self):
+        return self.integrate_g_product_over_space_in_cutoff(self.forcefield.evaluate_potential_function)
+
+    @cached_property
+    def excess_virial_sampled(self):
+        return -self.integrate_g_product_over_space_in_cutoff(
+            lambda r: r*self.forcefield.evaluate_scalar_force_function(r))
+
+
+class LJPairCorrelationIntegrator(PairCorrelationIntegrator):
+
+    def virial_correction(self, r_v):
+        '''Contribution to virial in the range [r_v:oo] assuming
+           g(r) == 1 in this range
+        '''
+        return -self.forcefield.epsilon**2*(
+            208*np.pi*r_v**6*self.forcefield.sigma**7 -
+            224*np.pi*self.forcefield.sigma**13/3)/(91*r_v**9)
+
+    @cached_property
+    def excess_virial_correction(self):
+        return self.virial_correction(self.forcefield.r_cutoff)
+
+    @cached_property
+    def virial_reduction_factor(self):
+        return self.beta * self.rho / 6.0
+
+    @cached_property
+    def reduced_virial(self):
+        return 1.0 + self.virial_reduction_factor * (
+            self.excess_virial_sampled + self.excess_virial_correction)
 
 
