@@ -18,6 +18,10 @@ cdef class NeighborsTable:
 
 cdef class ForceField:
 
+    # The following three methods operate on positions of particle
+    # in a system using the NeighborsTable specified pairs.
+    # By default use subsequent pairwise functions and can
+    # be overrided in subclasses for efficiency.
     cdef int _evaluate_forces(self,
                               np.ndarray[double, ndim=2, mode='c'] forces,
                               np.ndarray[double, ndim=2, mode='c'] positions,
@@ -36,6 +40,7 @@ cdef class ForceField:
                                      double box_size,
                                      NeighborsTable neighbors) except -1
 
+    # Pair wise methods that each dervied ForceField must implement
     # force on particle i (negative force on particle j)
     cdef int _evaluate_a_force(self,
                                double force[3],
@@ -47,6 +52,9 @@ cdef class ForceField:
 
 
 cdef class LJForceField(ForceField):
+    '''6-12 Lennard-Jones ForceField.
+       Potential is truncated and shifted to zero at r_cutoff.
+    '''
 
     cdef public double sigma
     cdef public double epsilon
@@ -55,10 +63,13 @@ cdef class LJForceField(ForceField):
 
 
 cdef class BasePyForceField(ForceField):
+    '''Base class for derived ForceFields written in pure Python
+    '''
 
-    pass
 
 cdef class BaseConfig:
+    '''Base state for a periodic system of particles
+    '''
 
     cdef public object positions
     cdef public object last_positions

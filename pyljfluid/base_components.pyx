@@ -1,6 +1,8 @@
 
 from __future__ import division
 
+from functools import wraps
+
 import numpy as np
 cimport numpy as np
 
@@ -138,6 +140,14 @@ cdef class NeighborsTable:
         return collect
 
 
+def vectorize_method(func):
+    @wraps(func, assigned=['__name__', '__doc__'])
+    def inner(self, x):
+        if isinstance(x, np.ndarray):
+            return np.array([func(self, xi) for xi in x.flat]).reshape(x.shape)
+        else:
+            return func(self, x)
+    return inner
 
 
 cdef class ForceField:
@@ -156,7 +166,6 @@ cdef class ForceField:
         cdef double force[3], pos_i[3], pos_j[3], r_ij[3]
 
         forces.fill(0.0)
-
         for neighbor_i in range(N_neighbors):
             inx_i = neighbor_indices[2 * neighbor_i]
             inx_j = neighbor_indices[2 * neighbor_i + 1]
@@ -254,14 +263,17 @@ cdef class ForceField:
         self._evaluate_potential(&U, positions, box_size, neighbors)
         return U / positions.shape[0]
 
-    def evaluate_scalar_force(self, r):
-        cdef double cr, f
-        if isinstance(r, np.ndarray):
-            return np.array(map(self.evaluate_scalar_force, r.flat)).reshape(r.shape)
-        else:
-            cr = r
-            self._evaluate_a_scalar_force(&f, cr)
-            return f
+    @vectorize_method
+    def evaluate_scalar_force_function(self, double r):
+        cdef double f
+        self._evaluate_a_scalar_force(&f, r)
+        return f
+
+    @vectorize_method
+    def evaluate_potential_function(self, double r):
+        cdef double U
+        self._evaluate_a_potential(&U, r)
+        return U
 
     def evaluate_excess_virial(self, positions, double box_size, NeighborsTable neighbors):
         ensure_N3_array(positions)
@@ -303,7 +315,6 @@ cdef class LJForceField(ForceField):
                               np.ndarray[double, ndim=2, mode='c'] positions,
                               double box_size,
                               NeighborsTable neighbors) except -1:
-
         forces.fill(0.0)
         PyLJFluid_evaluate_LJ_forces(<double *>np.PyArray_DATA(forces),
                                      neighbors.N_neighbors,
@@ -317,7 +328,6 @@ cdef class LJForceField(ForceField):
         if r >= self.r_cutoff:
             f_ptr[0] = 0.0
             return 0
-
         f_ptr[0] = evaluate_LJ_force(self.sigma, self.epsilon, r)
 
     @cython.cdivision(True)
@@ -325,7 +335,6 @@ cdef class LJForceField(ForceField):
         if r >= self.r_cutoff:
             U_ptr[0] = 0.0
             return 0
-
         U_ptr[0] = evaluate_U612(self.sigma, self.epsilon, r) - self.U_shift
 
 
