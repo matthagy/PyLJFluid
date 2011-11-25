@@ -26,7 +26,6 @@
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>
 <span class="kn">from</span> <span class="nn">pyljfluid</span> <span class="kn">import</span> (<span class="n">LJForceField</span><span class="p">,</span> <span class="n">Config</span><span class="p">,</span> <span class="n">MDSimulator</span><span class="p">,</span> 
                        <span class="n">PairCorrelationFunctionCalculator</span>)
-
 <span class="c"># Parameters</span>
 <span class="n">N</span> <span class="o">=</span> <span class="mi">1000</span>
 <span class="n">rho</span> <span class="o">=</span> <span class="mf">0.55</span>
@@ -46,18 +45,18 @@
     <span class="n">sim</span><span class="o">.</span><span class="n">cycle</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span>
 
 <span class="c"># Produce data</span>
-<span class="n">pcc</span> <span class="o">=</span> <span class="n">PairCorrelationFunctionCalculator</span><span class="p">(dr=</span><span class="mf">0.01</span><span class="p">*forcefield.sigma,</span> 
-                                        r_max=<span class="n">config0</span><span class="o">.</span><span class="n">box_size</span><span class="o">/</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">gr_calc</span> <span class="o">=</span> <span class="n">PairCorrelationFunctionCalculator</span><span class="p">(dr=</span><span class="mf">0.01</span><span class="p">*forcefield.sigma,</span> 
+                                            r_max=<span class="n">config0</span><span class="o">.</span><span class="n">box_size</span><span class="o">/</span><span class="mi">2</span><span class="p">)</span>
 <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
     <span class="n">sim</span><span class="o">.</span><span class="n">cycle</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span>
-    <span class="n">pcc</span><span class="o">.</span><span class="n">accumulate_config</span><span class="p">(</span><span class="n">sim</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
-<span class="n">r,g</span> <span class="o">=</span> <span class="n">pcc</span><span class="o">.</span><span class="n">calculate</span><span class="p">()</span>
+    <span class="n">gr_calc</span><span class="o">.</span><span class="n">accumulate_config</span><span class="p">(</span><span class="n">sim</span><span class="o">.</span><span class="n">config</span><span class="p">)</span>
+<span class="n">gr</span> <span class="o">=</span> <span class="n">gr_calc</span><span class="o">.</span><span class="n">get_data</span><span class="p">()</span>
 
 <span class="c"># Plot</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">clf</span><span class="p">()</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">g</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">gr.r</span><span class="p">,</span> <span class="n">gr.g</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">&#39;Pair Separation, $r$ ($\sigma$)&#39;</span><span class="p">)</span>
-<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">&#39;Pair Correlation, $g(r)$&#39;</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">&#39;Pair Pair Density, $g(r)$&#39;</span><span class="p">)</span>
 <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre></div>
 
