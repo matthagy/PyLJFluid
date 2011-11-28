@@ -22,14 +22,12 @@ PyLJFluid_evaluate_LJ_forces(double *OPT_RESTRICT forces,
   double factor = -4 * 6 * epsilon;
 
   for (uint i=0; i<N_neighbors; i++) {
-    uint inx_i = neighbors[i*2];
-    uint inx_j = neighbors[i*2 + 1];
+    uint inx_i3 = 3*neighbors[i*2];
+    uint inx_j3 = 3*neighbors[i*2 + 1];
 
     double r_ij[3];
-
-    { double *p_i_base = positions + 3 * inx_i;
-      double *p_j_base = positions + 3 * inx_j;
-
+    { double *p_i_base = positions + inx_i3;
+      double *p_j_base = positions + inx_j3;
       dok3 {
         double l = p_j_base[k] - p_i_base[k];
         if (unlikely(l > half_size)) {
@@ -40,7 +38,6 @@ PyLJFluid_evaluate_LJ_forces(double *OPT_RESTRICT forces,
         r_ij[k] = l;
       }
     }
-
     double r_sqr = 0.0;
     dok3 { r_sqr += r_ij[k] * r_ij[k]; }
     if (r_sqr > r_cutoff_sqr) continue;
@@ -51,12 +48,10 @@ PyLJFluid_evaluate_LJ_forces(double *OPT_RESTRICT forces,
       double x6 = x2*x2*x2;
       scaled_f = factor * inv_r_sqr * (2*x6*x6 - x6);
     }
-
-    { double *f_i_base = forces + 3 * inx_i;
+    { double *f_i_base = forces + inx_i3;
       dok3 { f_i_base[k] += r_ij[k] * scaled_f; }
     }
-
-    { double *f_j_base = forces + 3 * inx_j;
+    { double *f_j_base = forces + inx_j3;
       dok3 { f_j_base[k] -= r_ij[k] * scaled_f; }
     }
   }
