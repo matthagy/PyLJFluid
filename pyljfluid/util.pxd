@@ -1,6 +1,7 @@
 # declaration of Cython utilities
 
 from libc.math cimport sqrt
+cimport cython
 
 cdef inline double c_periodic_distance_1D(double a, double b, double box_size) nogil:
     """Calculated periodic distance along a single dimension
@@ -50,3 +51,13 @@ cdef inline double c_vector_sqr_length(double v[3]) nogil:
 
 cdef inline double c_vector_length(double v[3]) nogil:
     return sqrt(c_vector_sqr_length(v))
+
+@cython.cdivision(True)
+cdef inline signed int wrapping_modulo(signed int dividend, signed int divisor) nogil:
+    cdef signed int mod = cython.cmod(dividend, divisor)
+    if mod < 0:
+        return divisor + mod
+    return mod
+
+assert wrapping_modulo(10, 3) == 10 % 3
+assert wrapping_modulo(-10, 3) == -10 % 3
