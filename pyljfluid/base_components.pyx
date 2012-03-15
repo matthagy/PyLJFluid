@@ -437,23 +437,48 @@ cdef class BaseMeanSquareDisplacementCalculator:
 
     cdef readonly:
         unsigned int window_size, N_particles, n_positions_seen
-        double box_size
         np.ndarray displacement_window, last_positions, sum_displacements, acc_msd_data
 
-    def __cinit__(self, unsigned int window_size, unsigned int N_particles, *args, **kwds):
+    def __cinit__(self, unsigned int window_size, unsigned int N_particles,
+                  n_positions_seen=None,
+                  np.ndarray[double, ndim=3] displacement_window = None,
+                  np.ndarray[double, ndim=2] last_positions = None,
+                  np.ndarray[double, ndim=1] acc_msd_data = None,
+                  *args, **kwds):
         assert window_size > 0
         assert N_particles > 0
 
+        if n_positions_seen is None:
+            n_positions_seen = 0
+
+        assert n_positions_seen >= 0
+
         self.window_size = window_size
         self.N_particles = N_particles
-        self.n_positions_seen = 0
+        self.n_positions_seen = n_positions_seen
 
-        self.displacement_window = np.empty((self.window_size, self.N_particles, 3), dtype=float)
-        self.last_positions = np.empty((self.N_particles, 3), dtype=float)
         self.sum_displacements = np.empty((self.N_particles, 3), dtype=float)
-        self.acc_msd_data = np.zeros(self.window_size, dtype=float)
 
-    def __init__(self, window_size, N_particles):
+        displacement_window_shape = (window_size, self.N_particles, 3)
+        if displacement_window is not None:
+            assert (<object>displacement_window).shape == displacement_window_shape
+        else:
+            displacement_window = np.empty(displacement_window_shape, dtype=float)
+        self.displacement_window = displacement_window
+
+        if last_positions is not None:
+            assert (<object>last_positions).shape == (N_particles, 3)
+        else:
+            last_positions = np.empty((N_particles, 3), dtype=float)
+        self.last_positions = last_positions
+
+        if acc_msd_data is not None:
+            assert (<object>acc_msd_data).shape == (window_size,)
+        else:
+            acc_msd_data = np.zeros(window_size, dtype=float)
+        self.acc_msd_data = acc_msd_data
+
+    def __init__(self, window_size, N_particles, *args, **kwds):
         assert np.allclose(window_size, self.window_size)
         assert np.allclose(N_particles, self.N_particles)
 
@@ -532,18 +557,38 @@ cdef class BaseVelocityAutocorrelationCalculator:
         unsigned int window_size, N_particles, n_velocities_seen
         np.ndarray velocities_windows, acc_correlations
 
-    def __cinit__(self, unsigned int window_size, unsigned int N_particles, *args, **kwds):
+    def __cinit__(self, unsigned int window_size, unsigned int N_particles,
+                  n_velocities_seen=None,
+                  np.ndarray[double, ndim=3] velocities_windows = None,
+                  np.ndarray[double, ndim=1] acc_correlations = None,
+                  *args, **kwds):
         assert window_size > 0
         assert N_particles > 0
 
+        if n_velocities_seen is None:
+            n_velocities_seen = 0
+
+        assert n_velocities_seen >= 0
+
         self.window_size = window_size
         self.N_particles = N_particles
-        self.n_velocities_seen = 0
+        self.n_velocities_seen = n_velocities_seen
 
-        self.velocities_windows = np.empty((self.window_size, self.N_particles, 3), dtype=float)
-        self.acc_correlations = np.zeros(self.window_size, dtype=float)
+        velocities_windows_shape = (self.window_size, self.N_particles, 3)
+        if velocities_windows is not None:
+            assert (<object>velocities_windows).shape == velocities_windows_shape
+        else:
+            velocities_windows = np.empty(velocities_windows_shape, dtype=float)
+        self.velocities_windows = velocities_windows
 
-    def __init__(self, window_size, N_particles):
+        acc_correlations_shape = (self.window_size,)
+        if acc_correlations is not None:
+            assert (<object>acc_correlations).shape == acc_correlations_shape
+        else:
+            acc_correlations = np.zeros(acc_correlations_shape, dtype=float)
+        self.acc_correlations = acc_correlations
+
+    def __init__(self, window_size, N_particles, *args, **kwds):
         assert np.allclose(window_size, self.window_size)
         assert np.allclose(N_particles, self.N_particles)
 

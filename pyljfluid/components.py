@@ -401,8 +401,8 @@ class LJPairCorrelationIntegrator(PairCorrelationIntegrator):
 
 class WindowAnalyzeBase(object):
 
-    def __init__(self, window_size, N_particles, analyze_rate=1):
-        super(WindowAnalyzeBase, self).__init__(window_size, N_particles)
+    def __init__(self, window_size, N_particles, analyze_rate=1, *args, **kwds):
+        super(WindowAnalyzeBase, self).__init__(window_size, N_particles, *args, **kwds)
         self.analyze_rate = analyze_rate
 
     def compute_time(self):
@@ -420,6 +420,24 @@ class MeanSquareDisplacementCalculator(WindowAnalyzeBase, BaseMeanSquareDisplace
 
         return self.acc_msd_data / float(n_acc * self.N_particles)
 
+    def __reduce__(self):
+        return (create_msdc,
+                (self.window_size, self.N_particles,
+                 self.analyze_rate,
+                 self.n_positions_seen,
+                 self.displacement_window, self.last_positions,
+                 self.acc_msd_data))
+
+def create_msdc(window_size, N_particles, analyze_rate, n_positions_seen,
+                displacement_window, last_positions, acc_msd_data):
+    return MeanSquareDisplacementCalculator(window_size, N_particles,
+                                            analyze_rate=analyze_rate,
+                                            n_positions_seen=n_positions_seen,
+                                            displacement_window=displacement_window,
+                                            last_positions=last_positions,
+                                            acc_msd_data=acc_msd_data)
+
+
 class VelocityAutocorrelationCalculator(WindowAnalyzeBase, BaseVelocityAutocorrelationCalculator):
 
     def analyze_config(self, config):
@@ -431,4 +449,21 @@ class VelocityAutocorrelationCalculator(WindowAnalyzeBase, BaseVelocityAutocorre
             return None
 
         return self.acc_correlations / float(n_acc * self.N_particles)
+
+    def __reduce__(self):
+        return (create_vacfc,
+                (self.window_size, self.N_particles,
+                 self.analyze_rate,
+                 self.n_velocities_seen,
+                 self.velocities_windows, self.acc_correlations))
+
+def create_vacfc(window_size, N_particles, analyze_rate, n_velocities_seen,
+                 velocities_windows, acc_correlations):
+    return VelocityAutocorrelationCalculator(window_size, N_particles,
+                                             analyze_rate=analyze_rate,
+                                             n_velocities_seen=n_velocities_seen,
+                                             velocities_windows=velocities_windows,
+                                             acc_correlations=acc_correlations)
+
+
 
