@@ -10,8 +10,10 @@ except ImportError:
     def fmin_cg(*args, **kwds):
         raise RuntimeError('fmin_cg not available; install scipy to use this functionality')
 
-from base_components import (NeighborsTable, ForceField, LJForceField,
-                             BaseConfig, BasePairCorrelationFunctionCalculator)
+from base_components import (NeighborsTable, ForceField, LJForceField, BaseConfig,
+                             BasePairCorrelationFunctionCalculator,
+                             BaseMeanSquareDisplacementCalculator,
+                             BaseVelocityAutocorrelationCalculator)
 from util import periodic_distances
 
 
@@ -397,4 +399,36 @@ class LJPairCorrelationIntegrator(PairCorrelationIntegrator):
         return 1.0 + self.virial_reduction_factor * (
             self.excess_virial_sampled + self.excess_virial_correction)
 
+class WindowAnalyzeBase(object):
+
+    def __init__(self, window_size, N_particles, analyze_rate=1):
+        super(WindowAnalyzeBase, self).__init__(window_size, N_particles)
+        self.analyze_rate = analyze_rate
+
+    def compute_time(self):
+        return self.analyze_rate * np.arange(self.window_size)
+
+class MeanSquareDisplacementCalculator(WindowAnalyzeBase, BaseMeanSquareDisplacementCalculator):
+
+    def analyze_config(self, config):
+        self.analyze_positions(config.positions, config.box_size)
+
+    def compute_msd(self):
+        n_acc = self.calculate_n_accumulates()
+        if not n_acc:
+            return None
+
+        return self.acc_msd_data / float(n_acc * self.N_particles)
+
+class VelocityAutocorrelationCalculator(WindowAnalyzeBase, BaseVelocityAutocorrelationCalculator):
+
+    def analyze_config(self, config):
+        self.analyze_velocities(config.calculate_velocities())
+
+    def compute_vacf(self):
+        n_acc = self.calculate_n_accumulates()
+        if not n_acc:
+            return None
+
+        return self.acc_correlations / float(n_acc * self.N_particles)
 
