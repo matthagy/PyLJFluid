@@ -518,7 +518,7 @@ cdef class BaseMeanSquareDisplacementCalculator:
 
         cdef unsigned int i
         for i in range(0, 3*self.N_particles, 3):
-            c_periodic_direction(displacment_p + i, positions_p + i, last_positions_p + i, box_size)
+            c_periodic_direction(displacment_p + i, last_positions_p + i, positions_p + i, box_size)
 
     cdef void accumulate_mean_square_displacments(self) nogil:
         '''Move through displacement windows while accumulating
