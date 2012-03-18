@@ -401,9 +401,15 @@ class LJPairCorrelationIntegrator(PairCorrelationIntegrator):
 
 class WindowAnalyzeBase(object):
 
-    def __init__(self, window_size, N_particles, analyze_rate=1, *args, **kwds):
+    def __init__(self, window_size, N_particles, *args, **kwds):
+        assert 'analyze_rate' in kwds
+        self.analyze_rate = kwds.pop('analyze_rate')
         super(WindowAnalyzeBase, self).__init__(window_size, N_particles, *args, **kwds)
-        self.analyze_rate = analyze_rate
+
+    @classmethod
+    def create(cls, window_size, N_particles, analyze_rate=1):
+        # ensure analyze_rate is passed as a keyword
+        return cls(window_size, N_particles, analyze_rate=analyze_rate)
 
     def compute_time(self):
         return self.analyze_rate * np.arange(self.window_size)
