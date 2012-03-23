@@ -137,9 +137,11 @@ cdef class NeighborsTable:
         for neighbor_i in range(N_neighbors):
             inx_i = neighbor_indices[2 * neighbor_i]
             inx_j = neighbor_indices[2 * neighbor_i + 1]
-            r2 = c_periodic_distance_sqr(positions_p + inx_i,
-                                         positions_p + inx_j,
+
+            r2 = c_periodic_distance_sqr(positions_p + 3*inx_i,
+                                         positions_p + 3*inx_j,
                                          box_size)
+
             if r2 <= r2_cutoff:
                 assert inx_i < inx_j
                 cpython.set.PySet_Add(collect, (inx_i, inx_j))
