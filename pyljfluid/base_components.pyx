@@ -18,9 +18,14 @@ from util cimport (c_periodic_direction, c_periodic_distance,
                    wrapping_modulo)
 
 
+# include PyArray_DATA with nogil attribute (not included in numpy.pxd)
+cdef extern from "numpy/arrayobject.h":
+    void* PyArray_DATA(ndarray) nogil
+
 cdef extern from "lj_forces.h":
     void PyLJFluid_evaluate_LJ_forces(double *, size_t, unsigned int *, double *, double,
-                                      double, double, double)
+                                      double, double, double) nogil
+
 
 cdef ensure_N3_array(arr):
     if not isinstance(arr, np.ndarray):
@@ -122,7 +127,7 @@ cdef class NeighborsTable:
     def find_set_of_neighbors_within_distance(self, double r_cutoff,
                                               np.ndarray[double, ndim=2, mode='c'] positions,
                                               double box_size):
-        cdef double *positions_p = <double *>np.PyArray_DATA(positions)
+        cdef double *positions_p = <double *>PyArray_DATA(positions)
         cdef unsigned int* neighbor_indices = self.neighbor_indices
         cdef size_t N_neighbors = self.N_neighbors
         cdef unsigned int neighbor_i, inx_i, inx_j, k
@@ -317,13 +322,15 @@ cdef class LJForceField(ForceField):
                               np.ndarray[double, ndim=2, mode='c'] positions,
                               double box_size,
                               NeighborsTable neighbors) except -1:
-        forces.fill(0.0)
-        PyLJFluid_evaluate_LJ_forces(<double *>np.PyArray_DATA(forces),
-                                     neighbors.N_neighbors,
-                                     neighbors.neighbor_indices,
-                                     <double *>np.PyArray_DATA(positions),
-                                     box_size,
-                                     self.sigma, self.epsilon, self.r_cutoff)
+        with nogil:
+            cstring.memset(<void *>PyArray_DATA(forces),
+                           0, sizeof(double) * forces.shape[0] * 3)
+            PyLJFluid_evaluate_LJ_forces(<double *>PyArray_DATA(forces),
+                                         neighbors.N_neighbors,
+                                         neighbors.neighbor_indices,
+                                         <double *>PyArray_DATA(positions),
+                                         box_size,
+                                         self.sigma, self.epsilon, self.r_cutoff)
 
     @cython.cdivision(True)
     cdef int _evaluate_a_scalar_force(self, double *f_ptr, double r) except -1:
@@ -413,7 +420,7 @@ cdef class BasePairCorrelationFunctionCalculator:
     @cython.cdivision(True)
     def accumulate_positions(self, np.ndarray[double, ndim=2, mode='c'] positions not None,
                              double box_size):
-        cdef double *positions_p = <double *>np.PyArray_DATA(positions)
+        cdef double *positions_p = <double *>PyArray_DATA(positions)
         cdef np.ndarray[unsigned long, ndim=1, mode='c'] bins = self.bins
         cdef size_t N3 = 3*positions.shape[0]
         cdef unsigned int i,j
@@ -428,8 +435,8 @@ cdef class BasePairCorrelationFunctionCalculator:
                     bins[index] += 1
 
 cdef void copy_N3_array_data(np.ndarray dst, np.ndarray src, unsigned int N) nogil:
-    cstring.memcpy(<void *>np.PyArray_DATA(dst),
-                   <void *>np.PyArray_DATA(src),
+    cstring.memcpy(<void *>PyArray_DATA(dst),
+                   <void *>PyArray_DATA(src),
                    N * 3 * sizeof(double))
 
 
@@ -501,7 +508,7 @@ cdef class BaseMeanSquareDisplacementCalculator:
     cdef inline double *get_displacement_window(self, unsigned int window_index) nogil:
         # normalize index
         window_index = wrapping_modulo(self.n_positions_seen - 1 + window_index, self.window_size)
-        return ((<double *>np.PyArray_DATA(self.displacement_window)) +
+        return ((<double *>PyArray_DATA(self.displacement_window)) +
                 (window_index * self.N_particles * 3))
 
     @cython.boundscheck(False)
@@ -512,8 +519,8 @@ cdef class BaseMeanSquareDisplacementCalculator:
            Should be called before n_positions_seen is incremented so that
            we overwrite the oldest displacement window.
         '''
-        cdef double *positions_p = <double *>np.PyArray_DATA(positions)
-        cdef double *last_positions_p = <double *>np.PyArray_DATA(self.last_positions)
+        cdef double *positions_p = <double *>PyArray_DATA(positions)
+        cdef double *last_positions_p = <double *>PyArray_DATA(self.last_positions)
         cdef double *displacment_p = self.get_displacement_window(0)
 
         cdef unsigned int i
@@ -525,8 +532,8 @@ cdef class BaseMeanSquareDisplacementCalculator:
            the deltas to determine the displacement of each particle
            at each window in time.
         '''
-        cdef double *sum_displacements_p = <double *>np.PyArray_DATA(self.sum_displacements)
-        cdef double *acc_msd_data_p = <double *>np.PyArray_DATA(self.acc_msd_data)
+        cdef double *sum_displacements_p = <double *>PyArray_DATA(self.sum_displacements)
+        cdef double *acc_msd_data_p = <double *>PyArray_DATA(self.acc_msd_data)
         cdef double *displacement_slice
         cdef double delta, acc_sqr_delta
         cdef unsigned int N3 = 3*self.N_particles
@@ -595,7 +602,7 @@ cdef class BaseVelocityAutocorrelationCalculator:
     cdef inline double *get_velocities_window(self, unsigned int window_index) nogil:
         # normalize index
         window_index = wrapping_modulo(self.n_velocities_seen + window_index, self.window_size)
-        return ((<double *>np.PyArray_DATA(self.velocities_windows)) +
+        return ((<double *>PyArray_DATA(self.velocities_windows)) +
                 (window_index * self.N_particles * 3))
 
     def analyze_velocities(self, np.ndarray[double, ndim=2] velocities not None):
@@ -604,7 +611,7 @@ cdef class BaseVelocityAutocorrelationCalculator:
 
         # overwrite oldest velocities window with newest data
         cstring.memcpy(<void *>self.get_velocities_window(0),
-                       <void *>np.PyArray_DATA(velocities),
+                       <void *>PyArray_DATA(velocities),
                        self.N_particles * 3 * sizeof(double))
 
         self.n_velocities_seen += 1
@@ -615,7 +622,7 @@ cdef class BaseVelocityAutocorrelationCalculator:
         return max(self.n_velocities_seen - self.window_size + 1, 0)
 
     cdef void accumulate_velocity_correlations(self) nogil:
-        cdef double *acc_correlations_p = <double *>np.PyArray_DATA(self.acc_correlations)
+        cdef double *acc_correlations_p = <double *>PyArray_DATA(self.acc_correlations)
         cdef double *velocities_0, *velocities_i
         cdef double acc
         cdef unsigned int window_i, j
