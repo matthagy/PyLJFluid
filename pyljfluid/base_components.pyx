@@ -395,16 +395,16 @@ cdef class BaseConfig:
 cdef class BasePairCorrelationFunctionCalculator:
 
     cdef public:
-        double r_prec, r_min, r_max
+        double dr, r_min, r_max
         size_t N_bins
         np.ndarray bins
 
-    def __cinit__(self, r_prec, r_max, r_min=0.0, bins=None):
-        cdef int N_bins = <int>ceil((r_max - r_min) / r_prec)
+    def __cinit__(self, dr, r_max, r_min=0.0, bins=None):
+        cdef int N_bins = <int>ceil((r_max - r_min) / dr)
         if N_bins <= 0:
             raise ValueError("bad parameters")
 
-        self.r_prec = r_prec
+        self.dr = dr
         self.r_min = r_min
         self.r_max = r_max
         self.N_bins = <size_t>N_bins
@@ -415,7 +415,7 @@ cdef class BasePairCorrelationFunctionCalculator:
         self.bins = bins
 
     def __reduce__(self):
-        return self.__class__, (self.r_prec, self.r_max, self.r_min, self.bins.copy())
+        return self.__class__, (self.dr, self.r_max, self.r_min, self.bins.copy())
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -432,7 +432,7 @@ cdef class BasePairCorrelationFunctionCalculator:
         for i in range(0, N3, 3):
             for j in range(i+3, N3, 3):
                 r = c_periodic_distance(positions_p + i, positions_p + j, box_size)
-                index = <int>floor((r - self.r_min) / self.r_prec)
+                index = <int>floor((r - self.r_min) / self.dr)
                 if index >= 0 and index < self.N_bins:
                     bins[index] += 1
 

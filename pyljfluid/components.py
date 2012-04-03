@@ -301,24 +301,52 @@ def cached_property(name_or_func, cache_name=None):
     return wrapper
 
 
-class PairCorrelationData(object):
+class StaticPairCorrelation(object):
+    '''Describes the static correlation of isotropic particle pairs.
+          e.g. The numerical analogs of the standard g(r) and h(r) functions.
 
-    def __init__(self, bins, r_min, r_prec):
-        self.bins = bins
-        self.r_min = r_min
-        self.r_prec = r_prec
+       The underlying data is histogram of pair separation distances at fixed
+       spacing dr (i.e. the i-th bin contains the total number of pair
+       observed at distances of i*dr < (i+1)*dr.
+
+       Additionally, the separation distances can be shifted by an r_offset.
+       This is useful the avoid the leading zeros that correspond to inappreciably
+       close pair distances.
+    '''
+
+    def __init__(self, pair_distance_histogram, dr, r_offset=0.0):
+        self.pair_distance_histogram = pair_distance_histogram
+        self.dr = dr
+        self.r_offset = r_offset
 
     @cached_property
+    def r_lower(self):
+        '''Radial distance corresponding to correlation distances at
+           the lower bound of each bin.
+        '''
+        return self.r_offset + self.dr * np.arange(self.bins.size)
+
+    @cached_property
+    def r_mid(self):
+        '''Radial distance corresponding to correlation distances at
+           center of each bin.
+        '''
+        return self.r_lower + 0.5 * self.dr
+
+    @property
     def r(self):
-        return self.r_min + self.r_prec * np.arange(self.bins.size)
+        return self.r_mid
 
     @cached_property
     def g(self):
-        N = self.bins.sum()
+        N = self.pair_distance_histogram.sum()
         if not N:
             return None
 
-        r_max = self.bins.size * self.r_prec
+        v = 4.0 / 3.0 * np.pi * ((self.r_lower + self.dr)**3 - self.r**3)
+        rhos =  self.bins / v
+
+        r_max = self.pair_distance_histogram.size * self.dr
         V = 4.0 / 3.0 * np.pi * r_max**3
         rho = N / V
         v = 4.0 / 3.0 * np.pi * ((self.r + self.r_prec)**3 - self.r**3)
@@ -327,53 +355,74 @@ class PairCorrelationData(object):
 
     @cached_property
     def h(self):
+        if self.g is None:
+            return None
         return self.g - 1.0
 
 
-class PairCorrelationFunctionCalculator(BasePairCorrelationFunctionCalculator):
+class StaticPairCorrelationCalculator(BasePairCorrelationFunctionCalculator):
+    '''Calculate the PairCorrelationData from configurations (Config) of
+       particles. The calculation is performed by accumulating a histogram
+       of pair separation distances one configuration at a time. The
+       intermediate state of calculation can be saved by pickeling the
+       calculator object.
+    '''
 
     def accumulate_config(self, config):
         self.accumulate_positions(config.positions, config.box_size)
 
-    def get_data(self):
-        return PairCorrelationData(self.bins.copy(), self.r_min, self.r_prec)
+    def get_accumulated(self):
+        return PairCorrelation(self.bins.copy(), self.dr, self.r_min)
 
 
 class PairCorrelationIntegrator(object):
+    '''Calculate thermodynamic properties of an isotropic particle system
+       by integrating over the sampled pair correlation (PairCorrelation object)
+       for the system. Uses the potential and gradient of the force field associated
+       with the system.
+    '''
 
-    def __init__(self, pc_data, forcefield, rho=None, beta=None):
-        self.pc_data = pc_data
+    def __init__(self, pair_correlation, forcefield, rho, beta=1.0):
+        self.pair_correlation = pair_correlation
         self.forcefield = forcefield
         self.rho = rho
         self.beta = beta
 
-    def integrate_g_product_over_space_ex(self, func, where):
-        r = self.pc_data.r[where]
-        g = self.pc_data.g[where]
-        return np.trapz(4*np.pi*r**2 * g * func(r), r)
+    def integrate_g_product_over_space_ex(self, func, where=Ellipsis):
+        '''Numerically integrate
+            \int g(r) * r**2 * func(r)
+
+           The where argument allows the specification of which
+           elements of data arrays to include (i.e. allows the
+           exclusion of zero elements)
+        '''
+        r = self.pair_correlation.r[where]
+        g = self.pair_correlation.g[where]
+        return np.trapz(r**2 * g * func(r), r)
 
     @cached_property
-    def where_sparse(self):
-        return self.pc_data.g != 0.0
-
-    def integrate_g_product_over_space(self, func):
-        return self.integrate_g_product_over_space_ex(func, self.where_sparse)
+    def where_g_nonzero(self):
+        return self.pair_correlation.g != 0.0
 
     @cached_property
     def where_sparse_and_in_cutoff(self):
         return (self.pc_data.g != 0.0) & (self.pc_data.r <= self.forcefield.r_cutoff)
 
+    def integrate_g_product_over_space(self, func):
+        return self.integrate_g_product_over_space_ex(func, self.where_g_nonzero)
+
     def integrate_g_product_over_space_in_cutoff(self, func):
         return self.integrate_g_product_over_space_ex(func, self.where_sparse_and_in_cutoff)
 
-    @cached_property
-    def excess_internal_energy(self):
-        return self.integrate_g_product_over_space_in_cutoff(self.forcefield.evaluate_potential_function)
+    def calculate_excess_internal_energy(self):
+        return 2.0 * np.pi * self.rho * self.integrate_g_product_over_space_in_cutoff(self.forcefield.evaluate_potential_function)
 
-    @cached_property
-    def excess_virial_sampled(self):
-        return -self.integrate_g_product_over_space_in_cutoff(
-            lambda r: r*self.forcefield.evaluate_scalar_force_function(r))
+    def calculate_excess_pressure(self):
+        return 2.0 / 3.0 * np.pi * self.rho**2 * self.integrate_g_product_over_space_in_cutoff(
+            lambda r: r * self.forcefield.evaluate_scalar_force_function(r))
+
+    def calculate_virial(self):
+        return 1.0 - self.beta  / self.rho * self.calculate_excess_pressure()
 
 
 class LJPairCorrelationIntegrator(PairCorrelationIntegrator):
