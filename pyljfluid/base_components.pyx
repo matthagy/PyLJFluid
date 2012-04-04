@@ -381,7 +381,8 @@ cdef class BaseConfig:
                   np.ndarray[double, ndim=2, mode='c'] positions not None,
                   np.ndarray[double, ndim=2, mode='c'] last_positions,
                   double box_size,
-                  double dt):
+                  double dt,
+                  double sigma=1.0):
         ensure_N3_array(positions)
         if last_positions is None:
             last_positions = positions.copy()
@@ -390,6 +391,7 @@ cdef class BaseConfig:
         self.last_positions = last_positions
         self.box_size = box_size
         self.dt = dt
+        self.sigma = sigma
 
 
 cdef class BasePairCorrelationFunctionCalculator:

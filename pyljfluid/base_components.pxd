@@ -70,9 +70,10 @@ cdef class BasePyForceField(ForceField):
 cdef class BaseConfig:
     '''Base state for a periodic system of particles
     '''
-
-    cdef public object positions
-    cdef public object last_positions
-    cdef public double box_size
-    cdef public double dt
+    cdef public:
+        np.ndarray positions
+        np.ndarray last_positions
+        double box_size
+        double dt
+        double sigma
 

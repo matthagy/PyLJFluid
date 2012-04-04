@@ -28,38 +28,60 @@ __all__ = ['NeighborsTable', 'ForceField', 'LJForceField',
            'StaticPairCorrelationIntegrator',
            'LJStaticPairCorrelationIntegrator']
 
+def create_random_state(op=None):
+    if isinstance(op, np.random.RandomState):
+        return op
+    return np.random.RandomState(op)
 
-def create_velocities(N, T=1.0, mass=1.0):
-    return np.random.normal(scale=np.sqrt(T / mass), size=(N, 3))
+def create_velocities(N, T=1.0, mass=1.0, random_state=None):
+    return create_random_state(random_state).normal(scale=np.sqrt(T / mass), size=(N, 3))
 
 def calculate_box_size(N, sigma, rho):
     V = N * sigma**3 / rho
     return V**(1/3)
 
+def create_hcp_positions(l):
+    r = 0.5
+    row_height_shift = r * np.sqrt(3)
+    n_row = int(np.floor(l))
+    row0 = np.array([np.arange(n_row), np.zeros(n_row), np.zeros(n_row)]).T
+    plane0 = np.array([row0 + np.array([r if i%2==1 else 0, i*row_height_shift, 0])
+                       for i in xrange(int(np.floor(l / row_height_shift)))])
+    plane_height_shift = np.sqrt(6) * r * 2.0 / 3.0
+    planes = np.array([plane0 + np.array([r if i%2==1 else 0,
+                                         np.sqrt(3)/3*r if i%2==1 else 0,
+                                          i * plane_height_shift])
+                       for i in xrange(int(np.floor(l / plane_height_shift)))])
+    sites = planes.reshape((planes.shape[0] * planes.shape[1] * planes.shape[2], 3))
+    return sites
 
 class Config(BaseConfig):
 
     @classmethod
-    def create(cls, N, rho, dt, sigma=1.0, T=1.0, mass=1.0):
+    def create(cls, N, rho, dt, sigma=1.0, T=1.0, mass=1.0, random_state=None):
+        random_state = create_random_state(random_state)
         box_size = calculate_box_size(N, sigma, rho)
-        positions = np.random.uniform(0.0, box_size, (N, 3))
-        inst = cls(positions, None, box_size, dt)
-        inst.randomize_velocities(T=T, mass=mass)
-        inst.sigma = sigma
+        hcp_positions = sigma * create_hcp_positions(box_size / sigma)
+        if len(hcp_positions) < N:
+            raise ValueError("config cannot be initialized from hcp lattice")
+        hcp_indices = np.arange(len(hcp_positions))
+        random_state.shuffle(hcp_indices)
+        positions = hcp_positions[hcp_indices[:N:]]
+        inst = cls(positions, last_positions=None, box_size=box_size, dt=dt, sigma=sigma)
+        inst.randomize_velocities(T=T, mass=mass, random_state=random_state)
         return inst
 
     def copy(self):
-        cp = self.__class__(self.positions.copy(),
-                            self.last_positions.copy(),
-                            self.box_size,
-                            self.dt)
-        cp.sigma = self.sigma
-        return cp
+        return self.__class__(positions=self.positions.copy(),
+                              last_positions=self.last_positions.copy(),
+                              box_size=self.box_size,
+                              dt=self.dt,
+                              sigma=self.sigma)
 
     def with_new_positions(self, new_positions):
-        cp = self.__class__(new_positions, None, self.box_size, self.dt)
+        cp = self.__class__(positions=new_positions, last_positions=None,
+                            box_size=self.box_size, dt=self.dt, sigma=self.sigma)
         cp.set_velocities(self.calculate_velocities())
-        cp.sigma = self.sigma
         return cp
 
     def randomize_velocities(self, **kwds):
@@ -75,13 +97,13 @@ class Config(BaseConfig):
         v = self.calculate_velocities()
         return (v**2).sum(axis=1).mean()**0.5
 
-    def calculate_kinetic_energy(self, mass=1.0):
+    def calculate_kinetic_energy(self, mass):
         v_rms = self.calculate_rms_velocity()
         return 0.5 * mass * v_rms**2
 
-    def calculate_temperature(self, mass=1.0):
+    def calculate_temperature(self, mass):
         KE = self.calculate_kinetic_energy(mass)
-        return 2 * KE / 3
+        return 2.0 / 3.0 * KE
 
     @property
     def N(self):
@@ -121,7 +143,7 @@ class Config(BaseConfig):
         self.positions = positions
 
     def __reduce__(self):
-        return (Config, (self.positions, self.last_positions, self.box_size, self.dt))
+        return (Config, (self.positions, self.last_positions, self.box_size, self.dt, self.sigma))
 
 
 class NeighborsTableTracker(object):
@@ -262,6 +284,9 @@ class MDSimulator(object):
     def evaluate_potential(self):
         return self.forcefield.evaluate_potential(self.config.positions % self.config.box_size,
                                                   self.config.box_size, self.neighbors_table)
+
+    def evaluate_hamiltonian(self):
+        return self.evaluate_potential() + self.config.calculate_kinetic_energy(self.mass)
 
     def minimize(self, maxiter=10):
         minimizer = EnergyMinimzer(self.config, self.forcefield, maxiter=8,
