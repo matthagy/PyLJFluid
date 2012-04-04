@@ -19,5 +19,5 @@ pyljfluid/*.c
 # Build results
 build/
 
-# Demo (not currently manaaged)
-Demo/
+# Demox (not currently manaaged)
+Demox/
