@@ -1,7 +1,7 @@
 body {
     font:100%/1.4 Arial, Helvetica, sans-serif;
     margin-bottom:10px;
-    width: 950px;
+    width: 1000px;
 }
 
 #head {
@@ -27,7 +27,7 @@ body {
 
 #explain {
     float: left;
-    width: 560px;
+    width: 600px;
     margin: 0 10px 0 20px;
 }
 
