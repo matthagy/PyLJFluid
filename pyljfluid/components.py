@@ -16,12 +16,17 @@ from base_components import (NeighborsTable, ForceField, LJForceField, BaseConfi
                              BaseVelocityAutocorrelationCalculator)
 from util import periodic_distances
 
+# TODO
+# Separate simulation and analysis code into separate modules.
+# Further separate analysis code into static vs. dynamic analysis.
 
 __all__ = ['NeighborsTable', 'ForceField', 'LJForceField',
            'Config', 'NeighborsTableTracker', 'EnergyMinimzer',
            'MDSimulator',
-           'PairCorrelationData', 'PairCorrelationFunctionCalculator',
-           'PairCorrelationIntegrator', 'LJPairCorrelationIntegrator']
+           'StaticPairCorrelation',
+           'StaticPairCorrelationCalculator',
+           'StaticPairCorrelationIntegrator',
+           'LJStaticPairCorrelationIntegrator']
 
 
 def create_velocities(N, T=1.0, mass=1.0):
@@ -279,6 +284,8 @@ class MDSimulator(object):
 
 
 def cached_property(name_or_func, cache_name=None):
+    '''Wrapper to create a cached readonly property for a class.
+    '''
     if isinstance(name_or_func, basestring):
         return lambda func: cached_property(func, cache_name=name_or_func)
 
@@ -315,6 +322,9 @@ class StaticPairCorrelation(object):
     '''
 
     def __init__(self, pair_distance_histogram, dr, r_offset=0.0):
+        pair_distance_histogram = np.asarray(pair_distance_histogram)
+        assert pair_distance_histogram.ndim == 1
+        assert pair_distance_histogram.size > 0
         self.pair_distance_histogram = pair_distance_histogram
         self.dr = dr
         self.r_offset = r_offset
@@ -324,7 +334,7 @@ class StaticPairCorrelation(object):
         '''Radial distance corresponding to correlation distances at
            the lower bound of each bin.
         '''
-        return self.r_offset + self.dr * np.arange(self.bins.size)
+        return self.r_offset + self.dr * np.arange(self.pair_distance_histogram.size)
 
     @cached_property
     def r_mid(self):
@@ -343,14 +353,11 @@ class StaticPairCorrelation(object):
         if not N:
             return None
 
-        v = 4.0 / 3.0 * np.pi * ((self.r_lower + self.dr)**3 - self.r**3)
-        rhos =  self.bins / v
-
         r_max = self.pair_distance_histogram.size * self.dr
         V = 4.0 / 3.0 * np.pi * r_max**3
         rho = N / V
-        v = 4.0 / 3.0 * np.pi * ((self.r + self.r_prec)**3 - self.r**3)
-        rhos =  self.bins / v
+        v = 4.0 / 3.0 * np.pi * ((self.r_lower + self.dr)**3 - self.r_lower**3)
+        rhos =  self.pair_distance_histogram / v
         return rhos / rho
 
     @cached_property
@@ -372,12 +379,12 @@ class StaticPairCorrelationCalculator(BasePairCorrelationFunctionCalculator):
         self.accumulate_positions(config.positions, config.box_size)
 
     def get_accumulated(self):
-        return PairCorrelation(self.bins.copy(), self.dr, self.r_min)
+        return StaticPairCorrelation(self.bins.copy(), self.dr, self.r_min)
 
 
-class PairCorrelationIntegrator(object):
+class StaticPairCorrelationIntegrator(object):
     '''Calculate thermodynamic properties of an isotropic particle system
-       by integrating over the sampled pair correlation (PairCorrelation object)
+       by integrating over the sampled pair correlation (StaticPairCorrelation object)
        for the system. Uses the potential and gradient of the force field associated
        with the system.
     '''
@@ -405,14 +412,14 @@ class PairCorrelationIntegrator(object):
         return self.pair_correlation.g != 0.0
 
     @cached_property
-    def where_sparse_and_in_cutoff(self):
-        return (self.pc_data.g != 0.0) & (self.pc_data.r <= self.forcefield.r_cutoff)
+    def where_g_nonzero_and_in_cutoff(self):
+        return (self.pair_correlation.g != 0.0) & (self.pair_correlation.r <= self.forcefield.r_cutoff)
 
     def integrate_g_product_over_space(self, func):
         return self.integrate_g_product_over_space_ex(func, self.where_g_nonzero)
 
     def integrate_g_product_over_space_in_cutoff(self, func):
-        return self.integrate_g_product_over_space_ex(func, self.where_sparse_and_in_cutoff)
+        return self.integrate_g_product_over_space_ex(func, self.where_g_nonzero_and_in_cutoff)
 
     def calculate_excess_internal_energy(self):
         return 2.0 * np.pi * self.rho * self.integrate_g_product_over_space_in_cutoff(self.forcefield.evaluate_potential_function)
@@ -425,7 +432,7 @@ class PairCorrelationIntegrator(object):
         return 1.0 - self.beta  / self.rho * self.calculate_excess_pressure()
 
 
-class LJPairCorrelationIntegrator(PairCorrelationIntegrator):
+class LJStaticPairCorrelationIntegrator(StaticPairCorrelationIntegrator):
 
     def virial_correction(self, r_v):
         '''Contribution to virial in the range [r_v:oo] assuming
