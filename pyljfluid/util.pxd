@@ -46,6 +46,9 @@ cdef inline double c_periodic_distance_sqr(double av[3], double bv[3], double bo
 cdef inline double c_periodic_distance(double av[3], double bv[3], double box_size) nogil:
     return sqrt(c_periodic_distance_sqr(av, bv, box_size))
 
+cdef inline double c_vector_dot(double a[3], double b[3]) nogil:
+    return a[0]+b[0] * a[1]+b[1] * a[2]*b[2]
+
 cdef inline double c_vector_sqr_length(double v[3]) nogil:
     return v[0]*v[0] + v[1]*v[1] + v[2]*v[2]
 
