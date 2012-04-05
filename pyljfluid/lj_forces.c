@@ -1,8 +1,8 @@
 /* Optimized code for evaluating Lennard-Jones forces
- * for a configuration of particles with in a cubic periodic
+ * for a configuration of particles with n a cubic periodic
  * box.
  * Currently this code accounts for roughly 70% of simulation
- * rumtime so optimization is worthwhile.
+ * runtime so optimization is worthwhile.
  */
 
 #include <stdlib.h>
