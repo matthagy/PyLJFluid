@@ -187,36 +187,8 @@ cdef class ForceField:
             for k in range(3): forces[inx_i, k] += force[k]
             for k in range(3): forces[inx_j, k] -= force[k]
 
-
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    @cython.nonecheck(False)
-    cdef int _evaluate_excess_virial(self,
-                                     double *res_p,
-                                     np.ndarray[double, ndim=2, mode='c'] positions,
-                                     double box_size,
-                                     NeighborsTable neighbors) except -1:
-        cdef unsigned int* neighbor_indices = neighbors.neighbor_indices
-        cdef size_t N_neighbors = neighbors.N_neighbors
-        cdef unsigned int neighbor_i, inx_i, inx_j, k
-        cdef double force[3], pos_i[3], pos_j[3], r_ij[3], r, f, acc
-
-        acc = 0.0
-        for neighbor_i in range(N_neighbors):
-            inx_i = neighbor_indices[2 * neighbor_i]
-            inx_j = neighbor_indices[2 * neighbor_i + 1]
-
-            for k in range(3): pos_i[k] = positions[inx_i, k]
-            for k in range(3): pos_j[k] = positions[inx_j, k]
-            c_periodic_direction(r_ij, pos_i, pos_j, box_size)
-
-            r = c_vector_length(r_ij)
-            self._evaluate_a_scalar_force(&f, r)
-
-            acc += r * f
-
-        res_p[0] = -acc
-
     cdef int _evaluate_potential(self, double *U_p,
                                  np.ndarray[double, ndim=2, mode='c'] positions,
                                  double box_size,
@@ -240,6 +212,31 @@ cdef class ForceField:
 
         U_p[0] = acc_U
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    cdef int _evaluate_virial_sum(self, double *v_p,
+                                  np.ndarray[double, ndim=2, mode='c'] positions,
+                                  double box_size,
+                                  NeighborsTable neighbors) except -1:
+
+        cdef unsigned int* neighbor_indices = neighbors.neighbor_indices
+        cdef size_t N_neighbors = neighbors.N_neighbors
+        cdef unsigned int neighbor_i, inx_i, inx_j, k
+        cdef double pos_i[3], pos_j[3], r, f, acc_v
+
+        acc_v = 0.0
+        for neighbor_i in range(N_neighbors):
+            inx_i = neighbor_indices[2 * neighbor_i]
+            inx_j = neighbor_indices[2 * neighbor_i + 1]
+
+            for k in range(3): pos_i[k] = positions[inx_i, k]
+            for k in range(3): pos_j[k] = positions[inx_j, k]
+            r = c_periodic_distance(pos_i, pos_j, box_size)
+
+            self._evaluate_a_scalar_force(&f, r)
+            acc_v += r*f
+
+        v_p[0] = acc_v
 
     @cython.cdivision(True)
     @cython.boundscheck(False)
@@ -272,6 +269,12 @@ cdef class ForceField:
         self._evaluate_potential(&U, positions, box_size, neighbors)
         return U / positions.shape[0]
 
+    def evaluate_virial_sum(self, positions, double box_size, NeighborsTable neighbors):
+        ensure_N3_array(positions)
+        cdef double v
+        self._evaluate_virial_sum(&v, positions, box_size, neighbors)
+        return v / positions.shape[0]
+
     @vectorize_method
     def evaluate_scalar_force_function(self, double r):
         cdef double f
@@ -284,12 +287,8 @@ cdef class ForceField:
         self._evaluate_a_potential(&U, r)
         return U
 
-    def evaluate_excess_virial(self, positions, double box_size, NeighborsTable neighbors):
-        ensure_N3_array(positions)
-        cdef double r
-        self._evaluate_excess_virial(&r, positions, box_size, neighbors)
-        return r / positions.shape[0]
-
+    def long_range_virial_correction(self, r_cutoff):
+        return 0.0
 
 
 @cython.cdivision(True)
@@ -305,7 +304,7 @@ cdef inline double evaluate_LJ_force(double sigma, double epsilon, double r) nog
     cdef double x = sigma * inv_r
     cdef double x2 = x*x
     cdef double x6 = x2*x2*x2
-    return -4 * 6 * epsilon * inv_r * (2*x6*x6 - x6)
+    return 4 * 6 * epsilon * inv_r * (2*x6*x6 - x6)
 
 
 cdef class LJForceField(ForceField):
@@ -347,6 +346,14 @@ cdef class LJForceField(ForceField):
             U_ptr[0] = 0.0
             return 0
         U_ptr[0] = evaluate_U612(self.sigma, self.epsilon, r) - self.U_shift
+
+    def long_range_virial_correction(self, r_cutoff=None):
+        if r_cutoff is None:
+            r_cutoff = self.r_cutoff
+        return -self.epsilon**2 * (
+            208*np.pi*r_cutoff**6*self.sigma**7 -
+            224*np.pi*self.sigma**13/3) / (91*r_cutoff**9)
+
 
 
 cdef class BasePyForceField(ForceField):

@@ -25,8 +25,7 @@ __all__ = ['NeighborsTable', 'ForceField', 'LJForceField',
            'MDSimulator',
            'StaticPairCorrelation',
            'StaticPairCorrelationCalculator',
-           'StaticPairCorrelationIntegrator',
-           'LJStaticPairCorrelationIntegrator']
+           'StaticPairCorrelationIntegrator']
 
 def create_random_state(op=None):
     if isinstance(op, np.random.RandomState):
@@ -250,6 +249,8 @@ class EnergyMinimzer(object):
 
 class MDSimulator(object):
 
+    kB = 1.0
+
     def __init__(self, config, forcefield, mass=1.0, r_skin=1.0):
         self.config = config
         self.forcefield = forcefield
@@ -301,6 +302,60 @@ class MDSimulator(object):
         '''
         return self.forcefield.evaluate_potential(self.config.positions % self.config.box_size,
                                                   self.config.box_size, self.neighbors_table)
+
+    def compute_kinetic_energy(self):
+        '''Compute the kinetic energy due to translational veloctiy of particles.
+           Result are inversely scaled by the number of particles.
+        '''
+        return self.config.calculate_kinetic_energy(self.mass)
+
+    def compute_energy(self):
+        '''Compute the total energy (sum kinetic and potential) of the system.
+           Result are inversely scaled by the number of particles.
+        '''
+        return self.compute_potential_energy() + self.compute_kinetic_energy()
+
+    def compute_temperature(self):
+        return self.config.calculate_temperature(self.mass)
+
+    def compute_excess_pressure(self, correct_long_range):
+        '''Compute the pressure due to particle pair interactions.
+           Result are inversely scaled by the number of particles.
+        '''
+        v = 1.0 / 3.0 * self.forcefield.evaluate_virial_sum(
+            self.config.positions % self.config.box_size,
+            self.config.box_size, self.neighbors_table)
+        if correct_long_range:
+            v += self.forcefield.long_range_virial_correction()
+        return (self.kB / self.config.V) * v
+
+    def compute_ideal_pressure(self):
+        '''Compute pressure due to kinetic energy alone.
+           Result are inversely scaled by the number of particles.
+        '''
+        return self.kB * self.compute_temperature() / self.config.V
+
+    def compute_total_pressure(self, correct_long_range=True):
+        '''Compute the total (sum kinetic and potential) pressure.
+           Result are inversely scaled by the number of particles.
+        '''
+        return self.compute_excess_pressure(correct_long_range) + self.compute_ideal_pressure()
+
+    def compute_virial(self, correct_long_range=True):
+        P = self.compute_total_pressure(correct_long_range)
+        return P * self.config.V / (self.kB * self.compute_temperature())
+
+    def compute_excess_virial(self, correct_long_range):
+        v = ((3 * self.kB * self.compute_temperature())**-1 *
+             self.forcefield.evaluate_virial_sum(self.config.positions % self.config.box_size,
+                                                 self.config.box_size, self.neighbors_table))
+        if correct_long_range:
+            v += self.forcefield.long_range_virial_correction()
+        return v
+
+    # Old (deprecated) methods
+    def evaluate_potential(self):
+        return self.compute_potential_energy()
 
     def evaluate_hamiltonian(self):
         return self.compute_energy()
@@ -464,38 +519,21 @@ class StaticPairCorrelationIntegrator(object):
         return self.integrate_g_product_over_space_ex(func, self.where_g_nonzero_and_in_cutoff)
 
     def calculate_excess_internal_energy(self):
-        return 2.0 * np.pi * self.rho * self.integrate_g_product_over_space_in_cutoff(self.forcefield.evaluate_potential_function)
+        return (2.0 * np.pi * self.rho *
+                self.integrate_g_product_over_space_in_cutoff(self.forcefield.evaluate_potential_function))
 
-    def calculate_excess_pressure(self):
-        return 2.0 / 3.0 * np.pi * self.rho**2 * self.integrate_g_product_over_space_in_cutoff(
-            lambda r: r * self.forcefield.evaluate_scalar_force_function(r))
+#    def calculate_excess_pressure(self):
+#        return 2.0 / 3.0 * np.pi * self.rho**2 * self.integrate_g_product_over_space_in_cutoff(
+#            lambda r: r * self.forcefield.evaluate_scalar_force_function(r))
 
-    def calculate_virial(self):
-        return 1.0 - self.beta  / self.rho * self.calculate_excess_pressure()
+    def calculate_virial(self, correct_long_range=True):
+        v = 1.0 - 2.0 / 3.0 * np.pi * self.beta * self.rho * (
+            self.integrate_g_product_over_space_in_cutoff(
+            lambda r: r * -self.forcefield.evaluate_scalar_force_function(r)))
+        if correct_long_range:
+            v += self.forcefield.long_range_virial_correction(self.pair_correlation.r.max())
+        return v
 
-
-class LJStaticPairCorrelationIntegrator(StaticPairCorrelationIntegrator):
-
-    def virial_correction(self, r_v):
-        '''Contribution to virial in the range [r_v:oo] assuming
-           g(r) == 1 in this range
-        '''
-        return -self.forcefield.epsilon**2*(
-            208*np.pi*r_v**6*self.forcefield.sigma**7 -
-            224*np.pi*self.forcefield.sigma**13/3)/(91*r_v**9)
-
-    @cached_property
-    def excess_virial_correction(self):
-        return self.virial_correction(self.forcefield.r_cutoff)
-
-    @cached_property
-    def virial_reduction_factor(self):
-        return self.beta * self.rho / 6.0
-
-    @cached_property
-    def reduced_virial(self):
-        return 1.0 + self.virial_reduction_factor * (
-            self.excess_virial_sampled + self.excess_virial_correction)
 
 class WindowAnalyzeBase(object):
 
