@@ -37,28 +37,42 @@ def create_velocities(N, T=1.0, mass=1.0, random_state=None):
     return create_random_state(random_state).normal(scale=np.sqrt(T / mass), size=(N, 3))
 
 def calculate_box_size(N, sigma, rho):
+    '''Calculate the lateral size for a cubic box of N
+       particles, each of diameter sigma, such that the particle
+       density is rho = N*sigma**3/V
+    '''
     V = N * sigma**3 / rho
     return V**(1/3)
 
 def create_hcp_positions(l):
+    '''Create a hexagonal close-packed (hcp) lattice of sphere positions that are
+       contained within a cubic box of lateral size l (each sphere has unit diameter).
+    '''
     r = 0.5
     row_height_shift = r * np.sqrt(3)
+    plane_height_shift = np.sqrt(6) * r * 2.0 / 3.0
     n_row = int(np.floor(l))
+
     row0 = np.array([np.arange(n_row), np.zeros(n_row), np.zeros(n_row)]).T
     plane0 = np.array([row0 + np.array([r if i%2==1 else 0, i*row_height_shift, 0])
                        for i in xrange(int(np.floor(l / row_height_shift)))])
-    plane_height_shift = np.sqrt(6) * r * 2.0 / 3.0
     planes = np.array([plane0 + np.array([r if i%2==1 else 0,
                                          np.sqrt(3)/3*r if i%2==1 else 0,
                                           i * plane_height_shift])
                        for i in xrange(int(np.floor(l / plane_height_shift)))])
-    sites = planes.reshape((planes.shape[0] * planes.shape[1] * planes.shape[2], 3))
+
+    sites = planes.reshape((np.prod(planes.shape[:3:], 3)))
     return sites
 
 class Config(BaseConfig):
+    '''Represents the current static and dynamic state of isotropic
+       particle system within a cubic periodic box.
+    '''
 
     @classmethod
     def create(cls, N, rho, dt, sigma=1.0, T=1.0, mass=1.0, random_state=None):
+        '''Create a new random config with N particle at density rho.
+        '''
         random_state = create_random_state(random_state)
         box_size = calculate_box_size(N, sigma, rho)
         hcp_positions = sigma * create_hcp_positions(box_size / sigma)
@@ -281,12 +295,15 @@ class MDSimulator(object):
         self.config.rescale_boxsize_rho(rho)
         self.neighbors_table_tracker.reset(self.config.positions)
 
-    def evaluate_potential(self):
+    def compute_potential_energy(self):
+        '''Compute the internal potential energy due to the force field
+           interactions. Result are inversely scaled by the number of particles.
+        '''
         return self.forcefield.evaluate_potential(self.config.positions % self.config.box_size,
                                                   self.config.box_size, self.neighbors_table)
 
     def evaluate_hamiltonian(self):
-        return self.evaluate_potential() + self.config.calculate_kinetic_energy(self.mass)
+        return self.compute_energy()
 
     def minimize(self, maxiter=10):
         minimizer = EnergyMinimzer(self.config, self.forcefield, maxiter=8,
@@ -414,7 +431,7 @@ class StaticPairCorrelationIntegrator(object):
        with the system.
     '''
 
-    def __init__(self, pair_correlation, forcefield, rho, beta=1.0):
+    def __init__(self, pair_correlation, forcefield, rho, beta):
         self.pair_correlation = pair_correlation
         self.forcefield = forcefield
         self.rho = rho
