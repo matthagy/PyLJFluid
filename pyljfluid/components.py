@@ -60,7 +60,7 @@ def create_hcp_positions(l):
                                           i * plane_height_shift])
                        for i in xrange(int(np.floor(l / plane_height_shift)))])
 
-    sites = planes.reshape((np.prod(planes.shape[:3:], 3)))
+    sites = planes.reshape((np.prod(planes.shape[:3:]), 3))
     return sites
 
 class Config(BaseConfig):
