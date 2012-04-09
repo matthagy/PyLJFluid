@@ -1,4 +1,4 @@
-"""Data from Verlet's first paper of Lennard-Jones fluids.
+"""Data from Verlet's first paper on Lennard-Jones fluids.
 
        Computer "Experiments" on Clasical Fluids. I.
           Thermodynamical Properties of Lennard-Jones Molecules
