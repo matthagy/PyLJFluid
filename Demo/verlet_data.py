@@ -52,10 +52,10 @@ raw     = '''
 '''
 
 fields = 'rho T virial U omega K G KG r_v'.split()
-row_dtype = np.dtype([(field, '<f16') for field in fields])
+entry_dtype = np.dtype([(field, '<f16') for field in fields])
 
 entries = np.array(list(
   tuple(np.nan if el == '...' else float(el) for el in row)
   for row in (line.split() for line in (line.strip() for line in raw.split('\n'))
               if line)),
-  dtype=row_dtype)
+  dtype=entry_dtype)
