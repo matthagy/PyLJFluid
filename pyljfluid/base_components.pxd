@@ -22,7 +22,7 @@ cdef class NeighborsTable:
     cdef unsigned int* neighbor_indices
     cdef size_t N_neighbors, N_allocated
 
-    cdef int _rebuild_neigbors(self, np.ndarray[double, ndim=2] positions, double box_size) except -1
+    cdef int _rebuild_neigbors(self, np.ndarray[double, ndim=2, mode='c'] positions, double box_size) except -1
 
     cdef int add_neighbor(self, unsigned int i, unsigned int j) except -1
 
@@ -43,7 +43,7 @@ cdef class ForceField:
 
     cdef int _evaluate_potential(self,
                                  double *,
-                                 np.ndarray[double, ndim=2] positions,
+                                 np.ndarray[double, ndim=2, mode='c'] positions,
                                  double box_size,
                                  NeighborsTable neighbors) except -1
 

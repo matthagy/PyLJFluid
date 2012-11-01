@@ -528,7 +528,7 @@ cdef class BaseMeanSquareDisplacementCalculator:
             self.accumulate_mean_square_displacments()
 
     def calculate_n_accumulates(self):
-        return max(self.n_positions_seen - self.window_size, 0)
+        return max(<int>self.n_positions_seen - <int>self.window_size, 0)
 
     cdef inline double *get_displacement_window(self, unsigned int window_index) nogil:
         # normalize index
@@ -644,7 +644,7 @@ cdef class BaseVelocityAutocorrelationCalculator:
             self.accumulate_velocity_correlations()
 
     def calculate_n_accumulates(self):
-        return max(self.n_velocities_seen - self.window_size + 1, 0)
+        return max(<int>self.n_velocities_seen - <int>self.window_size + 1, 0)
 
     cdef void accumulate_velocity_correlations(self) nogil:
         cdef double *acc_correlations_p = <double *>PyArray_DATA(self.acc_correlations)
@@ -661,7 +661,7 @@ cdef class BaseVelocityAutocorrelationCalculator:
             acc = 0
             for j in range(N3):
                 acc += velocities_0[j] * velocities_i[j]
-            acc_correlations_p[window_i] = acc
+            acc_correlations_p[window_i] += acc
 
 
 
