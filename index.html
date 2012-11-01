@@ -28,9 +28,9 @@
 <span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>
 
 <span class="c"># Parameters</span>
-<span class="n">N</span> <span class="o">=</span> <span class="mi">1000</span>
-<span class="n">rho</span> <span class="o">=</span> <span class="mf">0.2</span>
-<span class="n">T</span> <span class="o">=</span> <span class="mf">1.5</span>
+<span class="n">N</span> <span class="o">=</span> <span class="mi">1000</span>    <span class="c"># Number of particles</span>
+<span class="n">rho</span> <span class="o">=</span> <span class="mf">0.2</span>   <span class="c"># Density</span>
+<span class="n">T</span> <span class="o">=</span> <span class="mf">1.5</span>     <span class="c"># Reduced temperature</span>
 <span class="n">forcefield</span> <span class="o">=</span> <span class="n">LJForceField</span><span class="p">(</span><span class="n">sigma</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">r_cutoff</span><span class="o">=</span><span class="mf">2.5</span><span class="p">)</span>
 <span class="n">r_neighbor_skin</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">*</span> <span class="n">forcefield</span><span class="o">.</span><span class="n">sigma</span>
 <span class="n">mass</span> <span class="o">=</span> <span class="mi">48</span> <span class="o">*</span> <span class="n">forcefield</span><span class="o">.</span><span class="n">epsilon</span> <span class="o">*</span> <span class="n">forcefield</span><span class="o">.</span><span class="n">sigma</span> <span class="o">**</span> <span class="o">-</span><span class="mi">2</span>
