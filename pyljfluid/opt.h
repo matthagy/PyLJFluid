@@ -25,6 +25,7 @@
 #ifndef NO_GCC_OPTIMIZATIONS
 /* load effective location before use */
 #  define prefetch(p) __builtin_prefetch(p, 1, 3)
+
 /* branch prediction hints */
 #  define likely(x)   __builtin_expect(!!(x), 1)
 #  define unlikely(x) __builtin_expect(!!(x), 0)

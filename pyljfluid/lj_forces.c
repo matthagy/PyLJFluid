@@ -29,12 +29,13 @@ typedef unsigned int uint;
 
 #define dok3 for (int k=0; k<3; k++)
 
-// Calculates net forces as due to LJ interactions on each particle within the
-// N x 3 force array.
-// Doesn't zero the force array, such that the calculated forces can be
-// accumulated on top of the forces already calculated by another force field.
-// Uses the neighbors table stored in the N_neighbor x 2 array of neighbor
-// indices.
+/* Calculates net forces as due to LJ interactions on each particle within the
+ * N x 3 force array.
+ * Doesn't zero the force array, such that the calculated forces can be
+ * accumulated on top of the forces already calculated by another force field.
+ * Uses the neighbors table stored in the N_neighbor x 2 array of neighbor
+ * indices.
+ */
 void
 PyLJFluid_evaluate_LJ_forces(double *OPT_RESTRICT forces,
                              size_t N_neighbors,
@@ -45,7 +46,7 @@ PyLJFluid_evaluate_LJ_forces(double *OPT_RESTRICT forces,
 {
   double half_size = 0.5 * box_size;
   double r_cutoff_sqr = r_cutoff * r_cutoff;
-  double sigma2 = sigma * sigma;
+  double sigma_sqr = sigma * sigma;
   double factor = -4 * 6 * epsilon;
 
   // loop over pairs of particles in neighbors tables
@@ -77,7 +78,7 @@ PyLJFluid_evaluate_LJ_forces(double *OPT_RESTRICT forces,
     // components of the force vector
     double scaled_f; {
       double inv_r_sqr = 1.0 / r_sqr;
-      double x2 = sigma2 * inv_r_sqr;
+      double x2 = sigma_sqr * inv_r_sqr;
       double x6 = x2*x2*x2;
       scaled_f = factor * inv_r_sqr * (2*x6*x6 - x6);
     }
