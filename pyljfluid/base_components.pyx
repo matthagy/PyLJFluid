@@ -13,6 +13,9 @@
 #  limitations under the License.
 #
 
+'''Core of numerically intensive components.
+'''
+
 from __future__ import division
 
 from functools import wraps
@@ -36,6 +39,7 @@ from util cimport (c_periodic_direction, c_periodic_distance,
 cdef extern from "numpy/arrayobject.h":
     void* PyArray_DATA(ndarray) nogil
 
+# optimized lennard jones forcefield in C
 cdef extern from "lj_forces.h":
     void PyLJFluid_evaluate_LJ_forces(double *, size_t, unsigned int *, double *, double,
                                       double, double, double) nogil
@@ -55,6 +59,17 @@ cdef ensure_N3_array(arr):
 
 
 cdef class NeighborsTable:
+    '''Keeps track of pairs of particles to include in forcefield
+    calculations.
+
+    Reduces complexity of forcefield computations from O(N^2) to
+    O(N) at the smaller cost of updating the neighbor table.
+    r_skin member controls how a close a pair of particles need be to
+    be considered neighbors. Larger values will include many insignificant
+    pairs, increasing costs of forcefield calculations, where smaller
+    values requires more frequent rebuilding of the neighbors table.
+    In general an r_skin equal to half the particle diameter is optimal.
+    '''
 
     def __cinit__(self, double r_forcefield_cutoff, double r_skin):
         self.r_forcefield_cutoff = r_forcefield_cutoff
@@ -173,7 +188,7 @@ def vectorize_method(func):
     return inner
 
 
-cdef class ForceField:
+cdef class BaseForceField:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
@@ -321,7 +336,20 @@ cdef inline double evaluate_LJ_force(double sigma, double epsilon, double r) nog
     return 4 * 6 * epsilon * inv_r * (2*x6*x6 - x6)
 
 
-cdef class LJForceField(ForceField):
+cdef class LJForceField(BaseForceField):
+    '''Leannard Jones potential forcefield
+
+    Parameters:
+       sigma - van der Waals radius for pair
+       epsilon - well depth of (pair potential
+       r_cutoff - distance at which the potential is truncated
+
+    Force evaluation for a system of particles uses optimized
+    C code as this will be the most computationally intensive
+    stage in most simulations (70% or more all computing time).
+    Additionally, the GIL is released in force calculations to
+    facilitate multithreading.
+    '''
 
     def __cinit__(self, sigma=1.0, epsilon=1.0, r_cutoff=2.5):
         self.sigma = sigma
@@ -370,9 +398,11 @@ cdef class LJForceField(ForceField):
 
 
 
-cdef class BasePyForceField(ForceField):
+cdef class BasePyForceField(BaseForceField):
     '''Allows Python derived classes to implement force field
-       functionality
+       functionality.
+
+       Currently incomplete
     '''
 
     pass

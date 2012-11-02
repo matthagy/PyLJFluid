@@ -423,13 +423,13 @@ class StaticPairCorrelation(object):
     '''Describes the static correlation of isotropic particle pairs.
           e.g. The numerical analogs of the standard g(r) and h(r) functions.
 
-       The underlying data is histogram of pair separation distances at fixed
-       spacing dr (i.e. the i-th bin contains the total number of pair
-       observed at distances of i*dr < (i+1)*dr.
+       The underlying data is a histogram of pair separation distances at
+       fixed spacing dr (i.e. the i-th bin contains the total number of
+       pair observed at distances of i*dr <= r < (i+1)*dr.
 
        Additionally, the separation distances can be shifted by an r_offset.
-       This is useful the avoid the leading zeros that correspond to inappreciably
-       close pair distances.
+       This is useful in avoiding the avoid the leading zeros that correspond
+       to unphysically close pair distances.
     '''
 
     def __init__(self, pair_distance_histogram, dr, r_offset=0.0):
@@ -460,6 +460,8 @@ class StaticPairCorrelation(object):
 
     @cached_property
     def g(self):
+        '''Reducued density pair correlations
+        '''
         N = self.pair_distance_histogram.sum()
         if not N:
             return None
@@ -473,6 +475,8 @@ class StaticPairCorrelation(object):
 
     @cached_property
     def h(self):
+        '''Shifted reducued density pair correlations
+        '''
         if self.g is None:
             return None
         return self.g - 1.0
@@ -506,16 +510,16 @@ class StaticPairCorrelationIntegrator(object):
         self.rho = rho
         self.beta = beta
 
-    def integrate_g_product_over_space_ex(self, func, where=Ellipsis):
+    def integrate_g_product_over_space_ex(self, func, mask=Ellipsis):
         '''Numerically integrate
             \int g(r) * r**2 * func(r)
 
-           The where argument allows the specification of which
+           The mask argument allows the specification of which
            elements of data arrays to include (i.e. allows the
            exclusion of zero elements)
         '''
-        r = self.pair_correlation.r[where]
-        g = self.pair_correlation.g[where]
+        r = self.pair_correlation.r[mask]
+        g = self.pair_correlation.g[mask]
         return np.trapz(r**2 * g * func(r), r)
 
     @cached_property
@@ -536,10 +540,6 @@ class StaticPairCorrelationIntegrator(object):
         return (2.0 * np.pi * self.rho *
                 self.integrate_g_product_over_space_in_cutoff(self.forcefield.evaluate_potential_function))
 
-#    def calculate_excess_pressure(self):
-#        return 2.0 / 3.0 * np.pi * self.rho**2 * self.integrate_g_product_over_space_in_cutoff(
-#            lambda r: r * self.forcefield.evaluate_scalar_force_function(r))
-
     def calculate_virial(self, correct_long_range=True):
         v = 1.0 - 2.0 / 3.0 * np.pi * self.beta * self.rho * (
             self.integrate_g_product_over_space_in_cutoff(
@@ -549,12 +549,14 @@ class StaticPairCorrelationIntegrator(object):
         return v
 
 
-class WindowAnalyzeBase(object):
+class BaseTimeCorelationCalculator(object):
+    '''Base class for Time Correlation Function (TCF) computations
+    '''
 
     def __init__(self, window_size, N_particles, *args, **kwds):
         assert 'analyze_rate' in kwds
         self.analyze_rate = kwds.pop('analyze_rate')
-        super(WindowAnalyzeBase, self).__init__(window_size, N_particles, *args, **kwds)
+        super(BaseTimeCorelationCalculator, self).__init__(window_size, N_particles, *args, **kwds)
 
     @classmethod
     def create(cls, window_size, N_particles, analyze_rate=1):
@@ -564,7 +566,10 @@ class WindowAnalyzeBase(object):
     def compute_time(self):
         return self.analyze_rate * np.arange(self.window_size)
 
-class MeanSquareDisplacementCalculator(WindowAnalyzeBase, BaseMeanSquareDisplacementCalculator):
+
+class MeanSquareDisplacementCalculator(BaseTimeCorelationCalculator, BaseMeanSquareDisplacementCalculator):
+    '''Compute the mean square displacment TCF; i.e. th self-positional TCF
+    '''
 
     def analyze_config(self, config):
         self.analyze_positions(config.positions, config.box_size)
@@ -594,7 +599,9 @@ def create_msdc(window_size, N_particles, analyze_rate, n_positions_seen,
                                             acc_msd_data=acc_msd_data)
 
 
-class VelocityAutocorrelationCalculator(WindowAnalyzeBase, BaseVelocityAutocorrelationCalculator):
+class VelocityAutocorrelationCalculator(BaseTimeCorelationCalculator, BaseVelocityAutocorrelationCalculator):
+    '''Compute the velocity autocorrelation TCF (VACF); i.e. the self-velocity TCF
+    '''
 
     def analyze_config(self, config):
         self.analyze_velocities(config.calculate_velocities())
