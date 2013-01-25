@@ -29,7 +29,7 @@ cdef class NeighborsTable:
     cdef int grow_table(self) except -1
 
 
-cdef class ForceField:
+cdef class BaseForceField:
 
     # The following three methods operate on positions of particle
     # in a system using the NeighborsTable specified pairs.
@@ -64,7 +64,7 @@ cdef class ForceField:
     cdef int _evaluate_a_potential(self, double *, double r) except -1
 
 
-cdef class LJForceField(ForceField):
+cdef class LJForceField(BaseForceField):
     '''6-12 Lennard-Jones ForceField.
        Potential is truncated and shifted to zero at r_cutoff.
     '''
@@ -75,7 +75,7 @@ cdef class LJForceField(ForceField):
     cdef public double U_shift
 
 
-cdef class BasePyForceField(ForceField):
+cdef class BasePyForceField(BaseForceField):
     '''Base class for derived ForceFields written in pure Python
     '''
 
