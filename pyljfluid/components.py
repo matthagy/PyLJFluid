@@ -39,7 +39,9 @@ __all__ = ['NeighborsTable', 'BaseForceField', 'LJForceField',
            'MDSimulator',
            'StaticPairCorrelation',
            'StaticPairCorrelationCalculator',
-           'StaticPairCorrelationIntegrator']
+           'StaticPairCorrelationIntegrator',
+           'MeanSquareDisplacementCalculator',
+           'VelocityAutocorrelationCalculator']
 
 def create_random_state(op=None):
     if isinstance(op, np.random.RandomState):
