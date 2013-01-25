@@ -24,7 +24,7 @@ except ImportError:
     def fmin_cg(*args, **kwds):
         raise RuntimeError('fmin_cg not available; install scipy to use this functionality')
 
-from base_components import (NeighborsTable, ForceField, LJForceField, BaseConfig,
+from base_components import (NeighborsTable, BaseForceField, LJForceField, BaseConfig,
                              BasePairCorrelationFunctionCalculator,
                              BaseMeanSquareDisplacementCalculator,
                              BaseVelocityAutocorrelationCalculator)
@@ -34,7 +34,7 @@ from util import periodic_distances
 # Separate simulation and analysis code into separate modules.
 # Further separate analysis code into static vs. dynamic analysis.
 
-__all__ = ['NeighborsTable', 'ForceField', 'LJForceField',
+__all__ = ['NeighborsTable', 'BaseForceField', 'LJForceField',
            'Config', 'NeighborsTableTracker', 'EnergyMinimzer',
            'MDSimulator',
            'StaticPairCorrelation',
