@@ -32,7 +32,7 @@ cdef inline void c_periodic_direction(double lv[3], double av[3], double bv[3], 
     """
     cdef double h = 0.5 * box_size
     cdef double l
-    for i in xrange(3):
+    for i in range(3):
         l = bv[i] - av[i]
         if l > h:
             l -= box_size
@@ -47,7 +47,7 @@ cdef inline double c_periodic_distance_sqr(double av[3], double bv[3], double bo
     cdef double h = 0.5 * box_size
     cdef double acc=0.0
     cdef double l
-    for i in xrange(3):
+    for i in range(3):
         l = bv[i] - av[i]
         if l > h:
             l -= box_size

@@ -13,7 +13,7 @@
 #  limitations under the License.
 #
 
-cimport util
+from . cimport util
 
 cimport numpy as np
 import numpy as np

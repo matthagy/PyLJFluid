@@ -1,7 +1,7 @@
 '''Compute the thermodynamic properties - excess internal energy and
    the virial - of a Lennard-Jones fluid.
    This is accomplished by computing the static pair correlation
-   function of particles with in the system. All of the thermodynamic
+   function of particles with in the system. All the thermodynamic
    properties can then be computed from g(r) due to the spherical
    symmetry of the isotropic potential.
 '''
@@ -20,9 +20,11 @@ mass = 48 * forcefield.epsilon * forcefield.sigma ** -2
 dt = 0.032
 gr_dr = 0.01 * forcefield.sigma
 
+
 def main():
     virial, U_interact = compute_thermodynamics(rho, T, verbose=True)
-    print 'average: virial=%.3f U_i=%.3f' % (virial, U_interact)
+    print('average: virial=%.3f U_i=%.3f' % (virial, U_interact))
+
 
 def compute_thermodynamics(rho, T, verbose=True):
     beta = 1.0 / T
@@ -33,32 +35,35 @@ def compute_thermodynamics(rho, T, verbose=True):
     virial, U_interact = calculate_thermodynamic_integrals(gr, rho, beta)
     return virial, U_interact
 
+
 def equilibrate_system(sim, verbose=True):
-    for i in xrange(50):
+    for i in range(50):
         sim.config.randomize_velocities(T=T, mass=mass)
         sim.cycle(50)
         if verbose:
-            print 'equilibrate cycle i=%03d U=%.3f virial=%.3f' % (
-                i, sim.compute_potential_energy(), sim.compute_virial())
+            print('equilibrate cycle i=%03d U=%.3f virial=%.3f' % (
+                i, sim.compute_potential_energy(), sim.compute_virial()))
+
 
 def compute_gr(sim, rho, beta, verbose=True):
     gr_calc = StaticPairCorrelationCalculator(dr=gr_dr,
                                               r_max=sim.config.box_size / 2)
-    for i in xrange(200):
+    for i in range(200):
         sim.cycle(20)
         gr_calc.accumulate_config(sim.config)
         if verbose:
-            virial, U_interact = calculate_thermodynamic_integrals(
-                                  gr_calc.get_accumulated(), rho, beta)
-            print 'compute cycle i=%04d H=%.4f <virial>=%.3f <U_i>=%.3f' % (
-                                i, sim.evaluate_hamiltonian(),
-                                virial, U_interact)
+            virial, U_interact = calculate_thermodynamic_integrals(gr_calc.get_accumulated(), rho, beta)
+            print('compute cycle i=%04d H=%.4f <virial>=%.3f <U_i>=%.3f' % (
+                i, sim.evaluate_hamiltonian(),
+                virial, U_interact))
     return gr_calc.get_accumulated()
 
-def calculate_thermodynamic_integrals(gr, rho, beta, ):
+
+def calculate_thermodynamic_integrals(gr, rho, beta):
     spci = StaticPairCorrelationIntegrator(gr, untruncated_forcefield, rho=rho, beta=beta)
     virial = spci.calculate_virial()
     U_interact = spci.calculate_excess_internal_energy()
     return virial, U_interact
+
 
 __name__ == '__main__' and main()

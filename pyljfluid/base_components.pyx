@@ -29,10 +29,10 @@ from libc.stdlib cimport malloc, realloc, free
 from libc.math cimport floor, ceil
 cimport cpython.set
 
-from util cimport (c_periodic_direction, c_periodic_distance,
-                   c_periodic_distance_sqr,
-                   c_vector_length, c_vector_sqr_length,
-                   wrapping_modulo)
+from .util cimport (c_periodic_direction, c_periodic_distance,
+                    c_periodic_distance_sqr,
+                    c_vector_length, c_vector_sqr_length,
+                    wrapping_modulo)
 
 
 # include PyArray_DATA with nogil attribute (not included in numpy.pxd)

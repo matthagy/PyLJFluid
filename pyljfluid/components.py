@@ -18,17 +18,18 @@ from __future__ import division
 from functools import wraps
 
 import numpy as np
+
 try:
     from scipy.optimize import fmin_cg
 except ImportError:
     def fmin_cg(*args, **kwds):
         raise RuntimeError('fmin_cg not available; install scipy to use this functionality')
 
-from base_components import (NeighborsTable, BaseForceField, LJForceField, BaseConfig,
-                             BasePairCorrelationFunctionCalculator,
-                             BaseMeanSquareDisplacementCalculator,
-                             BaseVelocityAutocorrelationCalculator)
-from util import periodic_distances
+from .base_components import (NeighborsTable, BaseForceField, LJForceField, BaseConfig,
+                              BasePairCorrelationFunctionCalculator,
+                              BaseMeanSquareDisplacementCalculator,
+                              BaseVelocityAutocorrelationCalculator)
+from .util import periodic_distances
 
 # TODO
 # Separate simulation and analysis code into separate modules.
@@ -43,21 +44,25 @@ __all__ = ['NeighborsTable', 'BaseForceField', 'LJForceField',
            'MeanSquareDisplacementCalculator',
            'VelocityAutocorrelationCalculator']
 
+
 def create_random_state(op=None):
     if isinstance(op, np.random.RandomState):
         return op
     return np.random.RandomState(op)
 
+
 def create_velocities(N, T=1.0, mass=1.0, random_state=None):
     return create_random_state(random_state).normal(scale=np.sqrt(T / mass), size=(N, 3))
+
 
 def calculate_box_size(N, sigma, rho):
     '''Calculate the lateral size for a cubic box of N
        particles, each of diameter sigma, such that the particle
        density is rho = N*sigma**3/V
     '''
-    V = N * sigma**3 / rho
-    return V**(1/3)
+    V = N * sigma ** 3 / rho
+    return V ** (1 / 3)
+
 
 def create_hcp_positions(l):
     '''Create a hexagonal close-packed (hcp) lattice of sphere positions that are
@@ -69,15 +74,16 @@ def create_hcp_positions(l):
     n_row = int(np.floor(l))
 
     row0 = np.array([np.arange(n_row), np.zeros(n_row), np.zeros(n_row)]).T
-    plane0 = np.array([row0 + np.array([r if i%2==1 else 0, i*row_height_shift, 0])
-                       for i in xrange(int(np.floor(l / row_height_shift)))])
-    planes = np.array([plane0 + np.array([r if i%2==1 else 0,
-                                         np.sqrt(3)/3*r if i%2==1 else 0,
+    plane0 = np.array([row0 + np.array([r if i % 2 == 1 else 0, i * row_height_shift, 0])
+                       for i in range(int(np.floor(l / row_height_shift)))])
+    planes = np.array([plane0 + np.array([r if i % 2 == 1 else 0,
+                                          np.sqrt(3) / 3 * r if i % 2 == 1 else 0,
                                           i * plane_height_shift])
-                       for i in xrange(int(np.floor(l / plane_height_shift)))])
+                       for i in range(int(np.floor(l / plane_height_shift)))])
 
     sites = planes.reshape((np.prod(planes.shape[:3:]), 3))
     return sites
+
 
 class Config(BaseConfig):
     '''Represents the current static and dynamic state of isotropic
@@ -124,11 +130,11 @@ class Config(BaseConfig):
 
     def calculate_rms_velocity(self):
         v = self.calculate_velocities()
-        return (v**2).sum(axis=1).mean()**0.5
+        return (v ** 2).sum(axis=1).mean() ** 0.5
 
     def calculate_kinetic_energy(self, mass):
         v_rms = self.calculate_rms_velocity()
-        return 0.5 * mass * v_rms**2
+        return 0.5 * mass * v_rms ** 2
 
     def calculate_temperature(self, mass):
         KE = self.calculate_kinetic_energy(mass)
@@ -140,7 +146,7 @@ class Config(BaseConfig):
 
     @property
     def V(self):
-        return self.box_size**3
+        return self.box_size ** 3
 
     @property
     def rho(self):
@@ -167,7 +173,7 @@ class Config(BaseConfig):
         self.set_velocities(velocities)
 
     def propagate(self, forces, mass=1.0):
-        positions = -self.last_positions + 2 * self.positions + (self.dt**2 / mass) * forces
+        positions = -self.last_positions + 2 * self.positions + (self.dt ** 2 / mass) * forces
         self.last_positions = self.positions
         self.positions = positions
 
@@ -193,7 +199,7 @@ class NeighborsTableTracker(object):
         delta = periodic_distances(current_positions, self.last_positions, self.box_size)
         self.last_positions = current_positions
         self.acc_delta += delta
-        dr_max = (self.acc_delta**2).sum(axis=1).max()**0.5
+        dr_max = (self.acc_delta ** 2).sum(axis=1).max() ** 0.5
         r_acceptable = 0.5 * self.neighbors_table.r_skin
         if dr_max > r_acceptable:
             return self.rebuild_neighbors(current_positions, check_were_valid=check_were_valid)
@@ -215,6 +221,7 @@ class NeighborsTableTracker(object):
     def find_vital_neighbors(self, positions):
         return self.neighbors_table.find_set_of_neighbors_within_distance(self.neighbors_table.r_forcefield_cutoff,
                                                                           positions, self.box_size)
+
 
 class EnergyMinimzer(object):
 
@@ -264,7 +271,6 @@ class EnergyMinimzer(object):
 
 
 class MDSimulator(object):
-
     kB = 1.0
 
     def __init__(self, config, forcefield, mass=1.0, r_skin=1.0):
@@ -283,8 +289,8 @@ class MDSimulator(object):
     normalize_positions_rate = 20
 
     def cycle(self, n=1):
-        for i in xrange(n):
-            if not i%self.normalize_positions_rate:
+        for i in range(n):
+            if not i % self.normalize_positions_rate:
                 self.normalize_positions()
 
             self.backup_positions[...] = self.config.positions
@@ -362,7 +368,7 @@ class MDSimulator(object):
         return P * self.config.V / (self.kB * self.compute_temperature())
 
     def compute_excess_virial(self, correct_long_range):
-        v = ((3 * self.kB * self.compute_temperature())**-1 *
+        v = ((3 * self.kB * self.compute_temperature()) ** -1 *
              self.forcefield.evaluate_virial_sum(self.config.positions % self.config.box_size,
                                                  self.config.box_size, self.neighbors_table))
         if correct_long_range:
@@ -386,7 +392,7 @@ class MDSimulator(object):
         while True:
             U_min = self.minimize(100)
             if verbose:
-                print '%.4e' % U_min
+                print('%.4e' % U_min)
             if U_min < cutoff:
                 return U_min
 
@@ -399,15 +405,15 @@ class MDSimulator(object):
 def cached_property(name_or_func, cache_name=None):
     '''Wrapper to create a cached readonly property for a class.
     '''
-    if isinstance(name_or_func, basestring):
+    if isinstance(name_or_func, str):
         return lambda func: cached_property(func, cache_name=name_or_func)
 
     func = name_or_func
     assert callable(func)
 
     if cache_name is None:
-        cache_name = '_' + func.func_name
-    assert isinstance(cache_name, basestring)
+        cache_name = '_' + func.__name__
+    assert isinstance(cache_name, str)
 
     @property
     @wraps(func)
@@ -418,6 +424,7 @@ def cached_property(name_or_func, cache_name=None):
             value = func(self)
             setattr(self, cache_name, value)
             return value
+
     return wrapper
 
 
@@ -469,10 +476,10 @@ class StaticPairCorrelation(object):
             return None
 
         r_max = self.pair_distance_histogram.size * self.dr
-        V = 4.0 / 3.0 * np.pi * r_max**3
+        V = 4.0 / 3.0 * np.pi * r_max ** 3
         rho = N / V
-        v = 4.0 / 3.0 * np.pi * ((self.r_lower + self.dr)**3 - self.r_lower**3)
-        rhos =  self.pair_distance_histogram / v
+        v = 4.0 / 3.0 * np.pi * ((self.r_lower + self.dr) ** 3 - self.r_lower ** 3)
+        rhos = self.pair_distance_histogram / v
         return rhos / rho
 
     @cached_property
@@ -522,7 +529,7 @@ class StaticPairCorrelationIntegrator(object):
         '''
         r = self.pair_correlation.r[mask]
         g = self.pair_correlation.g[mask]
-        return np.trapz(r**2 * g * func(r), r)
+        return np.trapezoid(r ** 2 * g * func(r), r)
 
     @cached_property
     def where_g_nonzero(self):
@@ -545,7 +552,7 @@ class StaticPairCorrelationIntegrator(object):
     def calculate_virial(self, correct_long_range=True):
         v = 1.0 - 2.0 / 3.0 * np.pi * self.beta * self.rho * (
             self.integrate_g_product_over_space_in_cutoff(
-            lambda r: r * -self.forcefield.evaluate_scalar_force_function(r)))
+                lambda r: r * -self.forcefield.evaluate_scalar_force_function(r)))
         if correct_long_range:
             v += self.forcefield.long_range_virial_correction(self.pair_correlation.r.max())
         return v
@@ -591,6 +598,7 @@ class MeanSquareDisplacementCalculator(BaseTimeCorelationCalculator, BaseMeanSqu
                  self.displacement_window, self.last_positions,
                  self.acc_msd_data))
 
+
 def create_msdc(window_size, N_particles, analyze_rate, n_positions_seen,
                 displacement_window, last_positions, acc_msd_data):
     return MeanSquareDisplacementCalculator(window_size, N_particles,
@@ -622,6 +630,7 @@ class VelocityAutocorrelationCalculator(BaseTimeCorelationCalculator, BaseVeloci
                  self.n_velocities_seen,
                  self.velocities_windows, self.acc_correlations))
 
+
 def create_vacfc(window_size, N_particles, analyze_rate, n_velocities_seen,
                  velocities_windows, acc_correlations):
     return VelocityAutocorrelationCalculator(window_size, N_particles,
@@ -629,6 +638,3 @@ def create_vacfc(window_size, N_particles, analyze_rate, n_velocities_seen,
                                              n_velocities_seen=n_velocities_seen,
                                              velocities_windows=velocities_windows,
                                              acc_correlations=acc_correlations)
-
-
-
