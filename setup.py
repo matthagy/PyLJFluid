@@ -13,131 +13,167 @@
 #  limitations under the License.
 #
 
-name = 'PyLJFluid'
-version = '0.0.1'
+from __future__ import annotations
 
-import sys
 import os
+import sys
+from pathlib import Path
 
-from distutils.core import setup, Extension
-from distutils.sysconfig import customize_compiler
-from distutils.ccompiler import new_compiler
+from setuptools import Extension, setup
+from setuptools._distutils.ccompiler import new_compiler
+from setuptools._distutils.sysconfig import customize_compiler
+
+name = "PyLJFluid"
+version = "0.0.2"
 
 try:
     import numpy as np
-    from numpy.distutils.misc_util import get_numpy_include_dirs
 except ImportError:
-    print name + ' require numpy'
-    exit(1)
+    print(f"{name} requires numpy", file=sys.stderr)
+    raise SystemExit(1)
 
 try:
-    from Cython.Compiler.Main import (compile as cython_compile,
-                                      CompilationOptions as CythonCompilationOptions,
-                                      default_options as cython_default_options)
     from Cython.Compiler.Errors import PyrexError
+    from Cython.Compiler.Main import (
+        CompilationOptions as CythonCompilationOptions,
+        compile as cython_compile,
+        default_options as cython_default_options,
+    )
+
     have_cython = True
-except ImportError,e:
+except ImportError:
     have_cython = False
 
-os.chdir(os.path.dirname(__file__) or os.getcwd())
+BASE_DIR = Path(__file__).resolve().parent
+os.chdir(BASE_DIR)
 
-def msg(s, *args):
-    sys.stderr.write((s % args if args else s) + '\n')
+
+def msg(s: str, *args: object) -> None:
+    sys.stderr.write(((s % args) if args else s) + "\n")
     sys.stderr.flush()
 
-def warn_msg(*args):
-    msg(*args)
 
-def error_msg(*args):
-    msg(*args)
+def warn_msg(s: str, *args: object) -> None:
+    msg(s, *args)
+
+
+def error_exit() -> None:
+    raise SystemExit(1)
+
+
+def error_msg(s: str, *args: object) -> None:
+    msg(s, *args)
     error_exit()
 
-def error_exit():
-    exit(1)
 
-def ensure_file(path):
-    if not os.path.isfile(path):
-        error_msg('missing path %s', path)
+def ensure_file(path: str | Path) -> Path:
+    path = Path(path)
+    if not path.is_file():
+        error_msg("missing path %s", path)
     return path
 
-def run_cython(cython_file, c_file):
+
+def run_cython(cython_file: Path, c_file: Path) -> None:
     assert have_cython
-    msg('Cythonizing %s -> %s', cython_file, c_file)
+    msg("Cythonizing %s -> %s", cython_file, c_file)
     options = CythonCompilationOptions(cython_default_options)
-    options.output_file = c_file
+    options.output_file = str(c_file)
     try:
-        result = cython_compile([cython_file], options)
-    except (EnvironmentError, PyrexError), e:
+        result = cython_compile([str(cython_file)], options)
+    except (EnvironmentError, PyrexError) as e:
         error_msg(str(e))
     else:
         if result.num_errors > 0:
             error_exit()
 
-def cython_extension(name, extra_c_files=[]):
-    base_path = name.replace('.','/')
-    cython_file = ensure_file(base_path + '.pyx')
-    cython_def_file = ensure_file(base_path + '.pxd')
-    c_file = base_path + '.c'
 
-    if (not os.path.exists(c_file) or
-        os.path.getmtime(c_file) <
-        max(os.path.getmtime(path) for path in [cython_file, cython_def_file]
-            if os.path.exists(path))):
+def prepare_extra_c_file(info: dict) -> str:
+    c_file = info["filename"]
+    compile_args = info.get("compile_args", [])
+
+    cc = new_compiler(verbose=3)
+    customize_compiler(cc)
+
+    objects = cc.compile(
+        [c_file],
+        output_dir=".",
+        extra_postargs=compile_args,
+    )
+    [o_file] = objects
+    return o_file
+
+
+def cython_extension(module_name: str, extra_c_files: list[dict] | None = None) -> Extension:
+    if extra_c_files is None:
+        extra_c_files = []
+
+    base_path = Path(*module_name.split("."))
+    cython_file = ensure_file(base_path.with_suffix(".pyx"))
+    cython_def_file = ensure_file(base_path.with_suffix(".pxd"))
+    c_file = base_path.with_suffix(".c")
+
+    source_mtime = max(
+        path.stat().st_mtime
+        for path in (cython_file, cython_def_file)
+        if path.exists()
+    )
+
+    if (not c_file.exists()) or (c_file.stat().st_mtime < source_mtime):
         if have_cython:
             run_cython(cython_file, c_file)
         else:
             ensure_file(c_file)
-            warn_msg('%s stale : %s has been updated and cython not available',
-                     c_file, cython_file)
+            warn_msg(
+                "%s stale: %s has been updated and Cython is not available",
+                c_file,
+                cython_file,
+            )
 
-    return Extension(name=name,
-                     sources=[c_file],
-                     extra_objects=map(prepare_extra_c_file, extra_c_files),
-                     include_dirs=get_numpy_include_dirs())
+    return Extension(
+        name=module_name,
+        sources=[str(c_file)],
+        extra_objects=[prepare_extra_c_file(info) for info in extra_c_files],
+        include_dirs=[np.get_include()],
+    )
 
-def prepare_extra_c_file(info):
-    c_file = info['filename']
-    compile_args = info.get('compile_args', [])
-    cc = new_compiler(verbose=3)
-    customize_compiler(cc)
-    [o_file] = cc.compile([c_file], '.',
-                         extra_postargs=compile_args)
-    return o_file
 
 extensions = [
-    cython_extension('pyljfluid.util'),
-
-    cython_extension('pyljfluid.base_components',
-                     extra_c_files=[
-                     dict(filename='pyljfluid/lj_forces.c',
-                          compile_args=['-std=c99', '-O3'])
-                     ])
-    ]
+    cython_extension("pyljfluid.util"),
+    cython_extension(
+        "pyljfluid.base_components",
+        extra_c_files=[
+            {
+                "filename": "pyljfluid/lj_forces.c",
+                "compile_args": ["-std=c99", "-O3"],
+            }
+        ],
+    ),
+]
 
 setup(
     name=name,
     version=version,
-    url='https://github.com/matthagy/PyLJFluid',
-    author='Matt Hagy',
-    author_email='hagy@gatech,.edu',
-    description='Classical fluids simulations using Python',
-    long_description='''
-    Perform the famous computer "expriments" on classical fluids by
-    Verlet et al. using Python.
-    ''',
-    classifiers = [
-    "Development Status :: 1 - Planning",
-    "Intended Audience :: Developers",
-    "Intended Audience :: Education",
-    "License :: OSI Approved :: Apache Software License",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python",
-    "Programming Language :: Cython",
-    'Topic :: Education',
-    'Topic :: Scientific/Engineering :: Chemistry',
-    'Topic :: Scientific/Engineering :: Physics',
-    'Topic :: Utilities'
+    url="https://github.com/matthagy/PyLJFluid",
+    author="Matt Hagy",
+    author_email="matthew.hagy@gmail.com",
+    description="Classical fluids simulations using Python",
+    long_description=(
+        'Perform the famous computer "experiments" on classical fluids by '
+        'Verlet et al. using Python.'
+    ),
+    classifiers=[
+        "Development Status :: 1 - Planning",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Education",
+        "License :: OSI Approved :: Apache Software License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Cython",
+        "Topic :: Education",
+        "Topic :: Scientific/Engineering :: Chemistry",
+        "Topic :: Scientific/Engineering :: Physics",
+        "Topic :: Utilities",
     ],
-    packages = ['pyljfluid'],
-    ext_modules = extensions
-    )
+    packages=["pyljfluid"],
+    ext_modules=extensions,
+)

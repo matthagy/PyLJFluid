@@ -26,6 +26,6 @@ PyLJFluid is Licensed under the permissive Apache Licensed.
 See included LICENSE file.
 '''
 
-from components import *
-from components import __all__
+from .components import *
+from .components import __all__
 
